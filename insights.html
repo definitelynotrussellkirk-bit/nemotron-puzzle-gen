@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Insights — Nemotron Reasoning Puzzles</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c232c; --ink:#e6edf3; --muted:#9aa7b4;
+    --line:#2b3440; --acc:#58a6ff; --good:#3fb950;
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:880px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.5px}
+  .lead{font-size:16px;color:var(--muted);margin:0 0 6px}
+  h2{font-size:21px;margin:38px 0 6px;padding-top:18px;border-top:1px solid var(--line)}
+  a{color:var(--acc)}
+  code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:13px;font-family:var(--mono)}
+  p{margin:10px 0}
+  .take{background:var(--panel);border-left:3px solid var(--good);border-radius:6px;
+        padding:9px 13px;margin:10px 0;font-size:15px}
+  .take b{color:var(--good)}
+  .demo{font-size:13px;color:var(--muted);margin:8px 0 0}
+  .small{font-size:13px;color:var(--muted)}
+  .nav{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 4px}
+  .nav a{background:var(--panel);border:1px solid var(--line);border-radius:20px;
+         padding:5px 13px;text-decoration:none;font-size:13px}
+  .tmpl{background:#0a0e13;border:1px dashed var(--line);border-radius:8px;
+        padding:12px 14px;color:var(--muted);font-family:var(--mono);font-size:12px;white-space:pre-wrap;margin:14px 0}
+  .scope{font-size:13px;color:var(--muted);background:var(--panel2);border-radius:8px;padding:10px 14px}
+  table{border-collapse:collapse;margin:12px 0;font-size:13.5px;width:100%}
+  th,td{border:1px solid var(--line);padding:6px 10px;text-align:left}
+  th{background:var(--panel2);color:var(--muted);font-weight:600}
+  td.n{text-align:right;font-family:var(--mono);color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>What we learned about search — and the generators we built</h1>
+  <p class="lead">We were hoping to teach an LLM to <b>search</b> these reasoning puzzles: enumerate candidate rules,
+     test them against the examples, prune, lock. We didn't get there. This is a log of what we tried, what we observed
+     (often a divergence from what we expected), and what we now speculate — plus the base <b>generators</b> we built
+     along the way, shared in case they're useful to someone else.</p>
+
+  <div class="nav">
+    <a href="index.html">▶ BIT viewer — GATE(f,g,h) calculator</a>
+    <a href="over-determination.html">▶ over-determination explorer</a>
+    <a href="miniskills.html">▶ mini-skill gallery</a>
+    <a href="generators/bit.py">▶ generators (bit.py source)</a>
+  </div>
+
+  <p class="scope"><b>Tone &amp; scope.</b> Nothing here is a confident claim or a leaderboard result. It's a set of
+     things we tried and what we noticed — written in terms of what we hoped for and where reality diverged. We did not
+     teach the model to solve gates; we're sharing the tools and observations in case they help. The
+     <code>generators/</code> show how to <b>create</b> each puzzle type (forward samplers; the solver/verifier and
+     trace code we used to mint CoT on top of them were internal). <span style="color:var(--muted)">Living page —
+     last revised 2026-06-19; see the repo's git log for the exact commit.</span></p>
+
+  <h2 style="border-top:none;padding-top:0">In one paragraph</h2>
+  <div class="take" style="border-left-color:var(--acc)"><b>Just want to understand the BIT puzzle?</b> Most people — and,
+    it seemed, the model — never quite did. The <a href="index.html">BIT viewer</a> explains it from scratch: it's one
+    whole-byte gate over three streams; solving it means picking the <i>simplest</i> consistent rule (<b>Occam on
+    arity</b>) — that matches the answer ~99% of the time, while the exact rule is uniquely determined only ~58% of the
+    time. This section stands on its own.</div>
+  <div class="take"><b>What we built:</b> a synthetic-data workflow for six puzzle families (sample a hidden rule → emit
+    examples + a query → get the oracle answer → try many CoT trace formats, keep only steps a solver can derive), used
+    to try teaching a 30B model to <i>search</i> these puzzles. It did not produce a reliable end-to-end BIT solver: BIT
+    runs varied ~12–60%. We're releasing the generators, the interactive BIT views, a 5,891-row mini-skill sample, the
+    BIT rule-space analysis, and the write-up below. The sections are independent — take any one and skip the rest.</div>
+  <div class="take"><b>One thing we saw (small evals):</b> on two 64-row BIT evals the model picked the right answer from
+    a <i>given</i> 8-candidate shortlist ~100% of the time, and from a shortlist it <i>generated itself</i> ~78–80%. On
+    the 50–51 rows where its generated shortlist contained gold, its pick matched gold (50/50, 51/51); the wrong rows
+    were rows where the shortlist did not contain gold. 50–51 rows is a small sample with run-to-run variance, so treat
+    these as rough directions, not precise measurements. Row-level data: <code>analysis/candidate_experiment_rows.jsonl</code>.</div>
+  <p class="demo">Jump to: <a href="#dissoc">the dissociation (main result)</a> ·
+     <a href="#bitrep">BIT as GATE(f,g,h)</a> · <a href="#overdet">BIT over-determination</a> ·
+     <a href="#shipped">what actually shipped</a> · <a href="#budget">budget &amp; hindsight</a></p>
+
+  <!-- ====================================================================
+  TO ADD AN INSIGHT: copy this block, give the <h2> a short stable title,
+  lead with one of: What we hoped / What we tried / What we observed / We
+  speculate — keep the body short, link a demo if any.
+
+    <h2>short title</h2>
+    <div class="take"><b>What we observed:</b> one sentence.</div>
+    <p>2–6 sentences: what we tried, what diverged, what we speculate.</p>
+    <p class="demo">Demo: <a href="...">page</a> · <code>generators/...py</code></p>
+  ===================================================================== -->
+
+  <h2>Base generators as a place to try many CoT formats</h2>
+  <div class="take"><b>What we tried:</b> rather than commit to one trace format, in our working system we paired each
+    forward generator with an exact solver/verifier, hoping the free oracle would let us cheaply try <i>many</i> custom
+    CoT formats.</div>
+  <p class="small" style="border-left:3px solid #2b5a8c;padding-left:10px"><b>Scope note:</b> the six generators
+     released under <code>generators/</code> are the <i>forward</i> samplers only (rule → examples → query → answer).
+     The solvers and trace-validators we used internally are <i>not</i> part of this release; some raw trace-format code
+     in <code>EXAMPLE GENERATORS/</code> still imports modules we haven't published, so treat it as patterns to read
+     rather than a runnable package.</p>
+  <p>Every generated row has a known latent rule and an exact gold answer (we sampled the rule), so the internal solver
+     could check any intermediate state for free — though "known because we sampled it" is not the same as "uniquely
+     identifiable from the displayed examples" (see BIT below). We hoped the free oracle would let us iterate formats
+     quickly — per-bit column scan, whole-byte hypothesis-test, column-algebra search, state-trace enumerate→prune,
+     compact one-liners, recovery/first-mistake, discriminate, DPO negatives — keeping only the ones whose every step is
+     derivable. That part worked as we hoped: the generators made format experimentation cheap. Whether any format
+     <i>taught</i> the model is a separate question (see the dissociation below).</p>
+  <p class="demo">Demo: <code>generators/</code> (all six types)</p>
+
+  <h2>Mini-skills, built from looking at the model's mistakes</h2>
+  <div class="take"><b>What we tried:</b> a library of 239 atomic "mini-skill" drills, each written after looking at
+    <i>how</i> the model failed a puzzle — read the mistake, build a targeted drill for that gap.</div>
+  <p>When the model got a puzzle wrong, we looked at the failure and tried to distil the missing atomic step into a
+     small self-contained drill (a single gate evaluation, a shift, a bijection check, a popcount-delta sign, …). The
+     generators mint these on demand, so the library grew out of failure-watching rather than a fixed syllabus. We
+     hoped the drills would shore up the gaps; we can't claim they moved the end result. The gallery shows up to two
+     random generations per skill; the full random dump is
+     <a href="miniskills_sample.jsonl">miniskills_sample.jsonl</a> (5,891 rows).</p>
+  <p class="small"><b>What "filtered" means (honestly):</b> these are <b>answer/format-consistency</b> filtered, not
+     "semantically coherent". We drop rows whose reasoning doesn't reach their boxed answer, remove exact-duplicate
+     message pairs, and exclude three skills we found ambiguous — <code>bit_scan_single</code> (boxes an answer the
+     reasoning never derives) and <code>trans_style_audit</code> / <code>trans_style_pick</code> (two style
+     interpretations can render the <i>same</i> value, so "which style?" isn't always uniquely answerable). The filter is
+     <code>analysis/filter_miniskills.py</code>; a fuller fix would add a "exactly one interpretation matches" guard in
+     the generator itself.</p>
+  <p class="demo">Demo: <a href="miniskills.html">mini-skill gallery</a> · <code>miniskills_sample.jsonl</code>
+     <span class="small">(canonical counts: the framework <b>registers 239</b> skills; the gallery covers <b>233</b> of
+     them; the released 5,891-row weighted sample contains examples from <b>221</b> — it's a random sample, so not every
+     registered skill appears.)</span></p>
+
+  <h2>Turning a task into micro-skill generators (the recipe)</h2>
+  <div class="take"><b>The idea behind the mini-skills:</b> the model could often do each step of a procedure on its own
+    but not chain them (the alphabet point above). So we generated one drill per step. This is just task-decomposition
+    turned into data — not magic — but it's a recipe you can reuse to build your own generators.</div>
+  <pre class="tmpl">full task:   A ─────────────────────────▶ Z
+                   decompose into the steps a solver actually does
+             A ──▶ B ──▶ C ──▶ … ──▶ Z
+
+per step, write a sampler that emits random instances of one step:
+   "given A, produce B"     ┐
+   "given B, produce C"     ├─  one micro-skill generator each
+        …                   ┘   (mints instances on demand)
+   "chain A ──▶ … ──▶ Z"    ───  plus one chaining drill
+
+gate every emitted row on the solver  ──▶  keep only derivable ones
+                                            = your mini-skill dataset</pre>
+  <p>Concretely: list the mechanical steps your solver takes, write a sampler that emits random instances of one step at
+     a time (and one that asks for the whole chain), and check each row against the solver so you only keep derivable
+     ones. That's how the 239 drills behind <a href="miniskills.html">miniskills.html</a> were built; the recipe transfers
+     to any task you can decompose into steps.</p>
+  <p class="demo">Demo: <a href="miniskills.html">mini-skill gallery</a> · <code>miniskills_sample.jsonl</code></p>
+
+  <h2 id="bitrep">BIT as GATE(f, g, h) — a representation we found nice to look at</h2>
+  <div class="take"><b>What we found helpful:</b> reading the 8-bit output as <i>one boolean gate over three whole-byte
+    streams of the input</i>, rather than eight independent per-bit problems. We offer it as a way to <i>show</i> and
+    <i>generate</i> BIT, not as something we taught the model to solve.</div>
+  <p>A "stream" is the input run through one cheap op (<code>shl</code>, <code>shr</code>, <code>rol</code>,
+     <code>ror</code>, complement, identity); the hidden rule is <code>output = GATE(f(x), g(x), h(x))</code>. On the
+     real data the gate families we saw most were <code>OR_XNOR</code> and <code>GATED_XNOR_NAND</code> (an XNOR/NAND
+     selector), with <code>AND</code>/<code>OR</code>/<code>XOR</code> close behind. In our hands, reading the byte
+     whole covered more rows in generation and made the traces shorter than the per-bit view. One thing to watch when
+     enumerating streams: for an 8-bit byte <code>rol_k == ror_(8−k)</code> — concretely
+     <code>rol1=ror7, rol2=ror6, rol3=ror5, rol4=ror4, rol5=ror3, rol6=ror2, rol7=ror1</code>, and the same for their
+     complements (<code>~rol_k = ~ror_(8−k)</code>). That collapses 14 of the 58 names onto 7+7 functions; the other 30
+     names (identity, complement, 14 shifts, 14 complemented shifts) are unique, leaving <b>44 distinct stream
+     functions</b>. We compared the function (truth table), not the label. One caveat worth stating: the sampler draws
+     names uniformly, so an aliased rotation is sampled about <b>1.32×</b> as often as a non-aliased stream — the prior
+     is label-weighted, not function-uniform.</p>
+  <p class="demo">Demo: <a href="index.html">live calculator</a> · <code>generators/bit.py</code></p>
+
+  <h2 id="overdet">BIT as a search for FUNCTIONS vs a search for ANSWERS</h2>
+  <div class="take"><b>Two ways to frame BIT:</b> <b>search for the function</b> (recover the exact hidden rule) or
+    <b>search for the answer</b> (just produce the query output). We spent most of our time on the first; Tong's
+    per-column / frequency-prior approach looks like the second.</div>
+  <p>The whole-byte space is 1,379,240 syntactic rules, collapsing to <b>89,086</b> distinct functions; one
+     <code>(input → output)</code> example leaves a median of ~700 of them. Within the whole-byte <code>GATE(f,g,h)</code>
+     class — which reproduces 100% of the real train.csv BIT puzzles — here are the numbers, computed on those real
+     puzzles (median 9 examples) and reproducible on random examples
+     (<code>analysis/measure_bit_space.py</code>, <code>analysis/occam_solver.py --stats</code>):</p>
+  <table>
+    <tr><th>Quantity</th><th>Value</th></tr>
+    <tr><td>exact rule uniquely determined (function search)</td><td class="n">~58%</td></tr>
+    <tr><td>all consistent rules agree on the query answer</td><td class="n">~83%</td></tr>
+    <tr><td>a random consistent rule, applied to the query</td><td class="n">~93%</td></tr>
+    <tr><td>the simplest consistent rule (Occam on arity), applied to the query</td><td class="n">~99%</td></tr>
+    <tr><td>random over all functions, ignoring the examples</td><td class="n">0.39%</td></tr>
+  </table>
+  <p>The rule is uniquely determined ~58% of the time; the answer is logically forced (all consistent rules agree) ~83%;
+     the simplest consistent rule (lowest gate-arity + simplest streams) matches the gold answer ~99%. The generator
+     builds each puzzle from a simple rule, so the simplest rule consistent with the examples is usually the one it used.
+     On the real competition BIT rows our internal full solver scored ~99.3% (measured on our machine; train.csv isn't
+     shipped here, so that figure isn't reproducible from this repo — the ~99% above <i>is</i>, on random examples via
+     <code>occam_solver.py --stats</code>).</p>
+  <p>We spent most of our time on function search (enumerate→test→prune for the exact rule). Answer search predicts the
+     output under a simplicity/frequency prior without insisting on a unique rule; Tong's per-column method (frequency
+     priors + stride extrapolation) reads as that. The <b>"Autotracer"</b> (<code>analysis/occam_solver.py</code>) is the
+     answer-search form: paste examples + a query, it returns the simplest consistent rule and the derivation.</p>
+  <p>One structural fact: <b>2,266 / 65,536</b> conceivable single <code>(x→y)</code> pairs are unreachable by any gate
+     in this whole-byte family; an unreachable pair is inconsistent with the single-shared-gate model. In our corpus
+     those were per-output-bit rows.</p>
+  <p class="demo">Demo: <a href="over-determination.html">over-determination explorer</a> ·
+     <code>analysis/occam_solver.py --demo</code> (the Autotracer)</p>
+
+  <h2>Encryption: a closed vocabulary seems to make it tractable</h2>
+  <div class="take"><b>What we noticed:</b> because every plaintext word is in a fixed list, an unknown cipher-word can
+    be finished by testing every same-length vocabulary word and rejecting on the bijection.</div>
+  <p>Once enough letters are pinned by the examples, a partly-decoded word can be resolved by checking each same-length
+     vocab word against the partial map and the one-to-one constraint (no two plaintext letters share a cipher letter).
+     The closed vocabulary appears to be what keeps the type tractable and usually answer-determined rather than
+     open-ended — though it's not guaranteed unique (a short query can occasionally admit more than one
+     vocabulary-consistent reading).</p>
+  <p class="demo">Demo: <code>generators/encryption.py</code></p>
+
+  <h2 id="shipped">Transformation — the one piece of ours that actually shipped</h2>
+  <div class="take"><b>What actually shipped:</b> we left the <i>numeric</i> transformation mostly unexplored — but the
+    <b>cipher (cryptarithm) transform rows</b> from this same generator were the one part of our own work that made it
+    into our best scoring blend.</div>
+  <p>The type has three independent knobs — operation × ordering × style — so the result layers an encoding on the raw
+     arithmetic, and (unlike BIT) it can be genuinely under-determined from few examples. We didn't push numeric
+     CoT-experimentation here. What we <i>did</i> end up using: about <b>2,500 verified cipher / cryptarithm rows</b>
+     (a CSP solve for the symbol→digit map plus honest priors), blended onto a strong public CoT base — and that blend
+     was our best result. Honest caveat: we couldn't cleanly separate how much the cipher rows added versus the base,
+     and cipher-type accuracy stayed low (~7.5%). But it is the part of our generator output that actually shipped, and
+     it's where we'd take the platform next.</p>
+  <p class="demo">Demo: <code>generators/transformation.py</code> (<code>--cipher</code> for symbol-disguised digits)</p>
+
+  <h2>Numeric rate puzzles: clearing the decimals first (like a human)</h2>
+  <div class="take"><b>What we tried:</b> for <code>d = ½·g·t²</code> (and <code>out = in·factor</code>), cancelling the
+    hidden decimal constant by <b>ratio</b> instead of recovering it — which kept those traces short in our generators.</div>
+  <p>The naive route recovers the rate by division (<code>40.99 / 3² = 4.5544…</code>) then multiplies it back — long
+     decimal arithmetic we found error-prone to render. A human doesn't materialize <code>g</code>: since
+     <code>d ∝ t²</code>, take any example <code>(t_e, d_e)</code> and the query <code>t_q</code> and write
+     <code>d_q = d_e · (t_q / t_e)²</code>; the unknown divides out. Same for unit conversion:
+     <code>out_q = out_e · (in_q / in_e)</code>. One honest caveat: the displayed example values are <i>rounded</i>, so
+     this is a <b>tolerance-compatible shortcut</b>, not exact cancellation over the shown digits. In a quick simulation
+     it reproduced the generator's exact 2-decimal answer about <b>74%</b> of the time (gravitational) and <b>68%</b>
+     (unit conversion) from a single example, with nearly all predictions inside the 1% relative tolerance the task
+     grades on. So it keeps traces tiny and stays within tolerance, rather than being provably exact.</p>
+  <p class="demo">Demo: <code>generators/gravitational.py</code> · <code>generators/unit_conversion.py</code></p>
+
+  <h2>Number conversion: no hidden parameter to infer</h2>
+  <div class="take"><b>What we noticed:</b> int↔Roman is a fixed, table-driven additive/subtractive notation (not a
+    positional system) — a deterministic greedy walk of the value table, with nothing to deduce beyond the direction.</div>
+  <p>Int→Roman greedily subtracts/appends from the <code>M, CM, D, … I</code> table; Roman→Int scans left-to-right and
+     subtracts when a smaller numeral precedes a larger one. The examples only signal which direction is being asked.</p>
+  <p class="demo">Demo: <code>generators/number_conversion.py</code></p>
+
+  <h2>We came to see the CoT formats as search traces</h2>
+  <div class="take"><b>What we hoped:</b> most of our formats are search traces (enumerate → test → prune → lock), and
+    we hoped our exact solver — a free step-verifier — would sidestep the weak/learned-verifier bottleneck the
+    literature describes.</div>
+  <p>We started from a <b>recursive bisection</b> instinct: to get from a state <code>A</code> to the goal <code>Z</code>,
+     if it fails in one shot, introduce a waypoint <code>N</code>, solve <code>A→N</code> and <code>N→Z</code>
+     separately, and keep bisecting until each hop is trivial. That divide-and-conquer instinct led us to the
+     search-supervision literature, whose training shapes are the same idea made trainable:</p>
+  <ul>
+    <li><b>Teach-long enumerate→test→prune SFT</b> — every step a solver-checkable state→action→observation→prune
+        transition, rejected branches shown in-trace (contrastive CoT for free).</li>
+    <li><b>STaR / expert-iteration trim</b> — <i>inspired by</i> Zelikman et al., <i>STaR</i> (2022) and Lehnert et al.,
+        <i>Searchformer / "Beyond A*"</i> (2024). To be clear about attribution: STaR samples and filters rationales
+        (including rationalization conditioned on the answer); Searchformer learns explicit A* search dynamics and then
+        bootstraps shorter successful traces. <i>Our</i> adaptation was the simpler "keep the shortest verified trace
+        under a declining length budget, else fall back to the solver's canonical trace" — a synthesis, not either
+        paper's method.</li>
+    <li><b>GRPO process / progress reward</b> — GRPO is from Shao et al., <i>DeepSeekMath</i> (2024,
+        arXiv:2402.03300). The specific reward shaping here — Hamming distance to gold and a "gold still reachable"
+        progress signal for near-misses — is <i>our</i> proposed design, not something from that paper.</li>
+    <li><b>Step-level process supervision</b> — Lightman et al., <i>Let's Verify Step by Step</i> (2023). Our solver
+        emits the earliest-wrong-step label at zero cost.</li>
+    <li><b>Off the table at submission:</b> tree-of-thought / MCTS / self-consistency — competition inference is greedy
+        single-pass, so these stayed training-data tools only.</li>
+  </ul>
+  <p class="demo">We had hoped a free exact verifier would be our edge where the field only approximates one. It didn't
+     translate into a solving win for us — the next note is where things diverged.</p>
+
+  <h2 id="dissoc">Ranking given candidates vs generating them</h2>
+  <div class="take"><b>What we did:</b> a BIT answer is one byte (256 possibilities). We tried handing the model a
+    shortlist of candidates (64 → 32 → 16 → 8) and having it pick; then we tried having it produce the shortlist itself.
+    The pick accuracy was lower in the second case, on small evals.</div>
+  <p>Given a shortlist, the model picked the listed answer down to 8 candidates. When it produced the 8 candidates itself
+     — from a deterministic recipe that derives them from the examples — end-to-end accuracy was ~78–80%. The breakdown
+     of that condition on a 64-row eval (end-to-end = parse × candidate-recall × selection-given-present):</p>
+  <table>
+    <tr><th>Stage (generate-then-pick condition)</th><th>Result</th></tr>
+    <tr><td>parse — emitted a clean, parseable 8-candidate set</td><td class="n">64/64</td></tr>
+    <tr><td>candidate set contained gold</td><td class="n">50–51/64 (~78–80%)</td></tr>
+    <tr><td>picked gold given its set contained gold</td><td class="n">50/50, 51/51</td></tr>
+  </table>
+  <p>So on these rows, parsing held (64/64); on the 50–51 rows whose set contained gold, the pick matched gold; the wrong
+     rows were rows where the generated set did not contain gold. Small sample (50–51 rows), so a direction, not a
+     precise number.</p>
+  <p>The three setups (64-row eval sets):</p>
+  <table>
+    <tr><th>Condition</th><th>Parse</th><th>Gold recall@8</th><th>Select | gold present</th><th>End-to-end</th></tr>
+    <tr><td><b>Externally-supplied</b> 8-slate (execute/select)</td><td class="n">—</td><td class="n">64/64 by construction</td><td class="n">~100%</td><td class="n">up to 64/64</td></tr>
+    <tr><td><b>Self-generated</b> 8-slate, run A (mask_qset)</td><td class="n">64/64</td><td class="n">50/64</td><td class="n">50/50</td><td class="n">50/64</td></tr>
+    <tr><td><b>Self-generated</b> 8-slate, run B (qset_only)</td><td class="n">64/64</td><td class="n">51/64</td><td class="n">51/51</td><td class="n">51/64</td></tr>
+    <tr><td><b>Raw end-to-end</b> (no scaffold)</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">~11–22% (7/64–14/64)</td></tr>
+  </table>
+  <p>Across these rows: parse rate was 64/64; on the rows where the generated set contained gold, the model's pick
+     matched gold (50/50, 51/51); the rows it got wrong were rows where the generated set did not contain gold. So the
+     errors we saw were in the generated set, not in parsing or selection. Small sample (50–51 rows), so this is a
+     direction, not a precise measurement.</p>
+  <p>For context, from the BIT section: a random rule consistent with the examples matches the answer ~93% of the time,
+     and the simplest consistent rule ~99%. The self-generated condition here was ~78–80%. Random over all functions
+     (ignoring the examples) is 0.39%; within-slate baselines: a random 8-slate contains gold 3.1%, picking from a
+     gold-containing 8-slate 12.5%.</p>
+  <p class="small"><b>Experimental detail.</b> Runs A and B are two prompt variants (separate sampler checkpoints from the
+     same BIT search lineage), each on the <i>same</i> 64-item eval; greedy decode (temp 0); the generated slate was
+     required to be 8 candidates (it always was). Row-level evidence and an aggregation script that reproduces every cell
+     above: <code>analysis/candidate_experiment_rows.jsonl</code> + <code>analysis/aggregate_candidate_experiment.py</code>.</p>
+  <p class="scope">These are our own internal evals (64-row sets) on the <i>search-teaching</i> BIT lineage specifically —
+     not a leaderboard number. The raw end-to-end figures varied a lot across formats and runs (a worst of ~12% on a
+     budget-fit deterministic search, up to ~50–60% in better runs); the 7/64–14/64 in this controlled condition is the
+     deliberately-unscaffolded end of that range, and it's the quantified version of the "knows each step, can't recite
+     the alphabet" gap.</p>
+
+  <h2>How this compares to Tong Huikang's 0.85 (speculation)</h2>
+  <div class="take"><b>We speculate:</b> we used <b>first divergence</b> — the first example/position where candidate
+    rules disagree — to build our atomic A→B drills, much like Tong's method. We <i>suspect</i> his approach worked
+    because he put bit-teaching, search priors, <i>and</i> the answer into <b>one trace</b>, where we fragmented the same
+    content across many micro-skills and formats. We did not verify this.</div>
+  <p>"First divergence" was the cheap, high-signal move for us: when several candidate rules survive, the informative
+     thing is the first example (or bit position) where they split — show the candidate, show the position it first
+     fails, reject. Our per-bit scans (<code>i[0]=… no (pos 2)</code>) and our discriminate / A→B drills are built on it.
+     Tong Huikang's public 0.85 solution
+     (<a href="https://github.com/tonghuikang/nemotron">github.com/tonghuikang/nemotron</a>) uses a related per-column
+     method with frequency priors and stride extrapolation.</p>
+  <p>Speculating from his public repo (we did not reverse-engineer it precisely): we suspect his published traces folded
+     the bit computation, the search priors, and the answer into a <b>single coherent end-to-end trace</b>, and we wonder
+     whether that "all in one trace" was the important difference. We instead split the same material across separate
+     micro-skills and many formats, so the model may never have seen one trace teaching search, the bit op, and the
+     answer together. If we tried again, consolidating into one unified trace is the first thing we'd test.</p>
+
+  <h2 id="budget">Budget &amp; hindsight</h2>
+  <div class="take"><b>What we'd change:</b> the work became an exercise in trying to teach an LLM to search, and
+    iterating that on a 30B model is slow. If we went again, we'd prototype the search-teaching loop on a much smaller
+    model first, then try to transfer up. <b>To be clear, that's about our own experimentation, not the submission</b> —
+    the competition target is fixed at Nemotron-3-Nano-30B-A3B; "smaller model" means a cheap prototyping rig to iterate
+    faster, then transferring the lessons up to the fixed 30B, never submitting a different size.</div>
+  <p>We earmarked about <b>$150</b> at the start — roughly <b>$100 for Tinker</b> (LoRA SFT / RL) and <b>~$50 / ~600
+     credits for Colab Pro+</b>. We kept each <b>experiment</b> cheap — only about <b>$2 of Tinker compute apiece</b> —
+     by running lots of small steps. To be precise about the bookkeeping: by "experiment" we mean one format/idea, which
+     usually bundled several short training <i>runs</i> plus evals; the ~$100 spread over a few dozen such experiments,
+     which is why the per-experiment figure and the larger run count below aren't in tension. Two things helped: exact,
+     free oracles meant every generated trace was usable without paying for human labels or a learned verifier; and
+     <b>having CODEX (an agent) manage the Tinker runs end-to-end — launch a small step, evaluate, hand off, repeat, with
+     no idle GPU or manual babysitting — saved us a lot of money</b>.</p>
+  <p><b>Trace length was our other cost lever.</b> Shorter chains-of-thought are cheaper both to train on and to run at
+     inference (the competition caps output at 7,800 tokens), so for most of the competition we deliberately kept our
+     traces tight — aiming under <b>~900 tokens</b>, then relaxing to <b>~1.1k</b>, then <b>~1.3k</b> as harder cases
+     needed more room. Only near the end did we spend the <i>full</i> token budget — letting the enumerate-test-prune
+     search traces run long to try to teach BIT — which is also where our cost climbed. On the training side, we had good
+     luck with <b>QLoRA (4-bit LoRA) on an H100</b> (via Colab Pro+, alongside Tinker for the LoRA SFT/RL) — it worked
+     especially well at the <i>lower</i> token counts, where short traces packed efficiently and runs stayed fast and
+     cheap.</p>
+  <p><b>The scale that bought:</b> roughly <b>950 Tinker runs</b> (≈500 short training runs + ≈450 evaluations) across
+     <b>~33 days</b>, about <b>175</b> training-data builds, the BIT trace format alone revised through <b>30-plus
+     numbered versions</b> (up to V35), and <b>256</b> automated agent-to-agent handoff notes.</p>
+  <p><b>We had a strong early start — so we were hopeful, not going in blind.</b> Before we leaned on a public CoT base,
+     one of our own SFT-trace submissions already scored about <b>78% overall</b> — which we <i>believe</i> placed us
+     around <b>top 50</b> on the leaderboard at the time — and notably that was with BIT solving only about <b>22%</b>,
+     so the five other puzzle types were already carrying the score. That early traction is why we
+     stayed hopeful and kept pushing: the approach seemed to be working for most of the data, and BIT was the obvious
+     holdout. Throughout, we kept doing <b>holistic looks at the errors</b> — reading what the model actually got wrong
+     and distilling each gap into a targeted mini-skill — rather than guessing. BIT being the stubborn ~22% is exactly
+     what pushed us into the search-teaching experiments below (which, on BIT specifically, varied widely — from a worst
+     of ~12% up to ~50–60% in better runs; same hard type, harder framing).</p>
+  <p><b>Where the time went, and what our final submission was.</b> Most of our effort went into trying to teach the
+     model a different search method for BIT (the bisection / enumerate-test-prune work above), and that bulk never
+     became a finished submission. Results <b>varied a lot</b> (these are rough recollections across a handful of runs,
+     on small evals — so treat the percentages as ballpark, not careful measurements): our better BIT runs reached
+     roughly <b>50–60%</b>, an
+     early attempt was ~<b>22%</b>, and the <i>worst</i> — a deterministic search that fit within budget — got only
+     ~<b>12%</b>. In that ~12% case everything was <b>locally solvable</b> — like the alphabet: ask the model each step
+     on its own ("what letter comes after A?", then "after B?") and it's right essentially every time; ask it to recite
+     the whole alphabet and it drops to ~12%. It did each <code>A→B</code> step in isolation but did not chain them — the
+     same pattern as the dissociation above (small samples, so a soft observation). (Our final
+     leaderboard entry was small and almost incidental — we were just testing whether our cipher (cryptarithm) rows added
+     any lift; those rows (see <i>Transformation</i> above) are the one part of our own work that shipped, blended onto a
+     strong public CoT base — and by the time we looked up, we'd run out of time.)</p>
+  <p>Our read on <i>where</i> we iterated: most of what seems to matter for search-teaching — trace shape, length
+     budget, verifier-gated trimming, where the model fakes a step — looks largely model-agnostic, so we suspect those
+     lessons would have transferred up from a smaller model at a fraction of the cost. We can't prove it; it's the bet
+     we'd make next time. The unexplored transformation lane and the STaR/GRPO loops are where we'd look first.</p>
+  <div class="take"><b>SPECULATION (hindsight-inspired) — an architecture hunch about MoE routing.</b> Everything in this
+     box is a hindsight-inspired hunch we could not confirm — us connecting our own routing struggles, after the fact,
+     with a noise result we only really weighed later. Nemotron-3-Nano-30B-A3B is a mixture-of-experts: almost all of its capacity sits in the sparse
+     <i>experts</i>, not the shared/attention layers. We reached about <b>0.76 relatively easily with LoRA on the shared
+     layers only — no expert layers</b>, which already gets you the bulk of the non-BIT types. Pushing further on BIT
+     seemed to need the experts, and in hindsight we <i>feel</i> the hard part was getting expert <b>routing to stay
+     consistent across a long trace</b>: a long enumerate-test-prune BIT trace only holds together if the same experts
+     fire reliably step after step, so any routing drift reads as noise. We <i>speculate</i> — purely a guess — that some
+     of that noise may even have been expert normalization. We're not the only ones poking at noise here: we recall a
+     public <b>gold-medal notebook</b> reporting that simply <i>adding noise</i> improved their result — and
+     <i>perhaps that's why</i>: if consistent expert routing is the real bottleneck, a little noise (or a different expert
+     normalization) might be helping in a way none of us fully understands. We never pinned it down; we flag it in case
+     it's a thread someone else can pull.</div>
+  <div class="take"><b>Why share something that hasn't paid off?</b> It hasn't produced a reliable result for us
+     <i>so far</i> — BIT runs ranged from ~12% to ~50–60% — and we're publishing it anyway. Whether that was a failure on our part or
+     something more fundamental, we honestly don't know. We suspect the missing piece may be mundane (not enough
+     training, too small a budget, or our cheap small-model <i>experiments</i> not transferring up to the fixed 30B
+     target — the submission model size is the competition's, not something we'd change). Reading other teams' write-ups
+     after the fact, the ones that
+     got search-style traces to stick seem to have trained substantially longer / on more data than our short
+     small-step runs, which makes us <i>speculate</i> we simply may not have trained long enough — though we can't
+     separate that from format or model-size effects. So we've included lots of <b>training traces</b> (the 5,891-row
+     mini-skill dump and the CoT formats) to give others ideas to build on — putting it in the open seems like the
+     fastest way for someone to spot what we missed. And honestly, part of it is paying it forward: reading other
+     people's public notebooks gave <i>us</i> insights along the way (the noise observation above is one), so
+     contributing ours back is the least we can do. That's the point of an open contribution.</div>
+
+  <h2>Acknowledgments</h2>
+  <p>Thanks to <b>Tong Huikang</b>, whose public Progress-Prize <b>0.85</b> solution
+     (<a href="https://github.com/tonghuikang/nemotron">github.com/tonghuikang/nemotron</a>) was the reference point we
+     compared our BIT approach against and learned from — his per-column / frequency-prior framing shaped how we thought
+     about the problem.</p>
+  <p>Programming and task management throughout were done with the help of AI coding agents — <b>OpenAI's Codex</b> and
+     <b>Anthropic's Claude</b> — which wrote and refactored much of the generator and analysis code and helped manage the
+     work; Codex in particular drove the long-running Tinker experiment loops end-to-end.</p>
+
+</div>
+</body>
+</html>

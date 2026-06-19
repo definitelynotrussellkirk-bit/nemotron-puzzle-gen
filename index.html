@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Understanding the BIT puzzle as GATE(f, g, h)</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c232c; --ink:#e6edf3; --muted:#9aa7b4;
+    --line:#2b3440; --acc:#58a6ff; --good:#3fb950; --warn:#d29922; --bad:#f85149;
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.5px}
+  h2{font-size:21px;margin:42px 0 12px;padding-top:14px;border-top:1px solid var(--line)}
+  h3{font-size:16px;margin:22px 0 8px;color:var(--acc)}
+  .sub{color:var(--muted);margin:0 0 8px}
+  p{margin:10px 0}
+  code,.mono{font-family:var(--mono)}
+  code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:13px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin:16px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:720px){.grid2{grid-template-columns:1fr}}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;margin:8px 0}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left}
+  th{background:var(--panel2);color:var(--muted);font-weight:600}
+  td.n{text-align:right;font-family:var(--mono)}
+  .bar{height:9px;background:var(--acc);border-radius:3px;display:inline-block;vertical-align:middle}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);color:var(--muted);margin:2px 4px 2px 0}
+  .pill-good{color:var(--good);border-color:#1f4a2b}
+  .pill-warn{color:var(--warn);border-color:#4a3a14}
+  .pill-bad{color:var(--bad);border-color:#5a1f1d}
+  .pill-focus{color:var(--acc);border-color:#1d4a72}
+  .lead{font-size:16px;color:var(--muted)}
+  /* calculator */
+  .calc label{display:block;font-size:12px;color:var(--muted);margin:10px 0 3px}
+  select,input{background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+    border-radius:6px;padding:7px 9px;font-family:var(--mono);font-size:13px;width:100%}
+  .byte{font-family:var(--mono);font-size:22px;letter-spacing:3px}
+  .bitrow{display:flex;gap:6px;font-family:var(--mono);margin:4px 0}
+  .bitrow .lab{width:64px;color:var(--muted);font-size:12px;flex:none;line-height:30px}
+  .cell{width:30px;height:30px;line-height:30px;text-align:center;border:1px solid var(--line);
+    border-radius:5px;background:var(--panel2);font-size:15px}
+  .cell.one{background:#16331f;color:var(--good);border-color:#1f4a2b}
+  .cell.zero{color:var(--muted)}
+  .out .cell.one{background:#10314f;color:var(--acc);border-color:#1d4a72}
+  .formula{font-family:var(--mono);font-size:15px;background:var(--panel2);padding:10px 12px;
+    border-radius:6px;border-left:3px solid var(--acc);margin:10px 0}
+  .small{font-size:12.5px;color:var(--muted)}
+  ul{margin:8px 0;padding-left:22px}
+  li{margin:4px 0}
+  .kpi{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0}
+  .kpi div{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 14px;flex:1;min-width:120px}
+  .kpi b{display:block;font-size:22px;color:var(--acc)}
+  .kpi span{font-size:12px;color:var(--muted)}
+  .flow{font-family:var(--mono);font-size:13px;white-space:pre;overflow-x:auto;
+    background:#0a0e13;border:1px solid var(--line);border-radius:8px;padding:14px;color:#cbd5e1}
+  .ok{color:var(--good)} .no{color:var(--bad)} .dim{color:var(--muted)}
+  .scope{font-size:13.5px;color:var(--muted);background:var(--panel2);border-left:3px solid var(--warn);
+    border-radius:6px;padding:9px 13px;margin:10px 0}
+  .refs{font-size:13px;color:var(--muted)}
+  .refs li{margin:5px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Understanding the BIT puzzle as <span style="color:var(--acc)">GATE(f, g, h)</span></h1>
+  <p class="lead" style="color:var(--ink)"><b>Don't learn our solution — learn BIT, or generate it.</b></p>
+  <p class="lead">We set out to teach the model to <b>search</b> these puzzles — enumerate candidate rules, test, prune.
+  One thing that helped was finding a clean way to <b>show</b> and <b>generate</b> the hardest type, BIT, as a whole-byte
+  gate over three streams. This page is that: the representation, a live calculator, how the data is generated, and what
+  the data looks like.</p>
+  <p class="scope">Honest scope: a <b>data-generation</b> piece, shared as work-in-progress — a way to <i>show</i> and
+  <i>generate</i> BIT. Not a claim we taught the model to solve gates, and not a leaderboard result. The fuller story of
+  what we learned about search is in <a href="insights.html" style="color:var(--acc)">insights.html</a>.</p>
+  <div class="scope" style="border-left-color:var(--good)"><b>Why an interactive viewer?</b> We hope it helps people
+  <i>visualize</i> the bit problems — and, paired with the
+  <a href="over-determination.html" style="color:var(--acc)">over-determination explorer</a>, watch the search space
+  <i>collapse</i> as each example rules out hypotheses. Many across past competitions have noted how valuable it is to
+  use LLMs to build quick visualizations of your data; this is us doing exactly that, and hoping it's useful to others.</div>
+
+  <!-- ===================================================== -->
+  <h2>0 · What the BIT puzzle actually is — a full walk-through</h2>
+  <p class="sub">If you finished the competition and still didn't quite <i>get</i> the bit puzzle, you're in good company —
+     it seems most people didn't, and (as far as we could tell) the model didn't really either. So here's the whole thing
+     from scratch, assuming no prior familiarity. If you don't care about our solution but want to <b>understand BIT</b>,
+     this section is the point of the repo.</p>
+
+  <h3>The puzzle</h3>
+  <p>You're shown several examples of an <b>8-bit input</b> turning into an <b>8-bit output</b>, all made by <i>one</i>
+     hidden rule. Then you get a new input and must produce its output:</p>
+  <div class="flow">01010001 -> 11011101
+00001001 -> 01101101
+00010101 -> 01010101
+11111111 -> 10000001
+10011101 -> 01000101
+   ... (a few more) ...
+00110100 -> ?            &lt;- find this</div>
+  <p>That's the whole task. (This is a real puzzle; the answer is <code>10010111</code>, and you'll see exactly why below.)</p>
+
+  <h3>The per-bit view (why it looks hard)</h3>
+  <p>The natural first move is to treat each of the 8 output bits as its own little puzzle — "output bit 3 is some
+     function of the input bits." But a single boolean function of 8 input bits is one of 2<sup>256</sup> possibilities,
+     and ~9 examples barely dent that. Seen per-bit, the puzzle feels almost impossible — and that's exactly where most
+     people (and, it seemed, the model) get stuck.</p>
+
+  <h3>The key idea: it's ONE whole-byte operation</h3>
+  <p>The hidden rule is almost never 8 unrelated bit-functions. It's a single operation on the <i>whole byte</i>: take a
+     few cheap whole-byte <b>views</b> of the input and combine them with one boolean <b>gate</b>:</p>
+  <div class="formula">output = GATE( f(x), g(x), h(x) )</div>
+  <p>where <code>x</code> is the input byte and <code>f, g, h</code> are cheap transforms of it. This turns the puzzle into a small search instead of a per-bit one.</p>
+
+  <h3>Streams — the f, g, h</h3>
+  <p>A <b>stream</b> is the input run through one cheap whole-byte op:</p>
+  <ul>
+    <li><code>x</code> — the input unchanged (identity); <code>~x</code> — every bit flipped (complement).</li>
+    <li><code>shl k</code> / <code>shr k</code> — <b>shift</b> all bits k places left/right, filling the empty end with 0
+       (bits that fall off the edge are lost).</li>
+    <li><code>rol k</code> / <code>ror k</code> — <b>rotate</b> all bits k places, wrapping the bits that fall off back
+       around to the other end (nothing is lost).</li>
+  </ul>
+  <p>On <code>10110010</code>: <code>shl1 = 01100100</code> (everything slides left, a 0 enters on the right);
+     <code>rol1 = 01100101</code> (same slide, but the bit that fell off the left wraps to the right). There are 58 named
+     streams — but only <b>44 distinct</b>, because for an 8-bit byte <code>rol k</code> and <code>ror (8−k)</code> are
+     literally the same function.</p>
+
+  <h3>Gates — the combine step</h3>
+  <p>A <b>gate</b> combines the streams <i>bit-by-bit</i>. The simplest are 2-input: <code>AND</code>, <code>OR</code>,
+     <code>XOR</code>, applied at each position of two streams. There are also 3-input families (e.g. <code>OR_XNOR</code>,
+     <code>MAJ3</code> = majority-of-3, <code>CH</code> = choose) that mix three streams. Each output bit is just the gate
+     applied to the matching bits of the streams — nothing more. <b>The live calculator in §3 below lets you pick three
+     streams and a gate and watch the output computed one bit at a time</b> — the fastest way to feel how it works.</p>
+
+  <h3>What the whole-byte view buys you</h3>
+  <p>Reading the byte <i>whole</i> collapses the hypothesis space from "2<sup>256</sup> per bit" down to <b>89,086</b>
+     distinct whole-byte functions. That small class reproduces <b>100% of the real competition BIT puzzles</b> — every gold answer is some gate over three streams. So the right mental model isn't
+     eight little puzzles; it's "guess one <code>GATE(f,g,h)</code>."</p>
+
+  <h3>Two questions: the function vs the answer</h3>
+  <p>"Solving BIT" can mean two different things:</p>
+  <ul>
+    <li><b>Search for the FUNCTION</b> — recover the exact hidden rule.</li>
+    <li><b>Search for the ANSWER</b> — just produce the output for the query input.</li>
+  </ul>
+  <p>Computed on the real puzzles (median 9 examples each), within the whole-byte class:</p>
+  <table>
+    <tr><th>Quantity</th><th>Value</th></tr>
+    <tr><td>exact rule uniquely determined (function search)</td><td class="n">~58%</td></tr>
+    <tr><td>all consistent rules agree on the query answer</td><td class="n">~83%</td></tr>
+    <tr><td>a random consistent rule, applied to the query</td><td class="n">~93%</td></tr>
+    <tr><td>the simplest consistent rule (Occam on arity), applied to the query</td><td class="n">~99%</td></tr>
+    <tr><td>random over all functions (ignore the examples)</td><td class="n">0.39%</td></tr>
+  </table>
+
+  <h3>Why the simplest consistent rule matches the answer</h3>
+  <p>The examples do not uniquely determine the rule ~42% of the time. The generator builds each puzzle from a low-arity
+     gate over small shifts, so the simplest rule consistent with the examples is usually the one it used. Picking that
+     rule and applying it to the query matches the gold answer ~99% of the time. Reproducible:
+     <code>analysis/occam_solver.py --stats</code>.</p>
+
+  <h3>The solver, in one sentence</h3>
+  <p>Among all <code>GATE(f,g,h)</code> rules consistent with the examples, take the simplest and apply it to the query.
+     That's the <b>"Autotracer"</b> (<code>analysis/occam_solver.py --demo</code>): on the puzzle up top it returns
+     <code>out = XOR(shl1, ~shl7)</code> and <code>00110100 → 10010111</code>. (On the real competition BIT rows our
+     internal solver scored ~99.3%, measured on our machine; train.csv isn't shipped here, so that figure isn't
+     reproducible from this repo. The ~99% on random examples is — <code>occam_solver.py --stats</code>.)</p>
+
+  <p class="scope"><b>Note:</b> the model also did not seem to handle BIT well, which is part of why we spent so long on
+     it. This section stands on its own — you can take the GATE(f,g,h) framing, the numbers, or the solver and ignore the
+     rest of the repo.</p>
+
+  <!-- ===================================================== -->
+  <h2>1 · Base generators → many custom CoT formats</h2>
+  <p>Every generated row has a known latent rule and an exact gold answer — a hidden rule, a few worked examples, one
+     query. In our working system we paired each <b>forward generator</b> with a <b>solver-oracle</b>. What those
+     generators got us was room to experiment: cheaply minting training data in many custom CoT formats, each checked
+     against the oracle (we never kept a trace the solver couldn't derive). The generators are the substrate; the CoT
+     formats are experiments we ran on top. <span class="small">(A known rule is not the same as a rule uniquely
+     identifiable from the shown examples — see §5. The solvers/validators were internal; the released
+     <code>generators/</code> are the forward samplers only.)</span></p>
+  <table>
+    <tr><th>Type</th><th>Hidden rule</th><th>Generator</th></tr>
+    <tr><td>number conversion</td><td>integer ↔ Roman numeral</td><td class="pill-good">exact, no hidden parameter</td></tr>
+    <tr><td>encryption</td><td>1:1 letter substitution over a small fixed vocab (26 illustrative words here; the competition's was 77)</td><td class="pill-good">closed vocab, usually answer-determined</td></tr>
+    <tr><td>gravitational</td><td><code>d = ½·g·t²</code>, unknown g</td><td class="pill-good">ratio shortcut (tolerance)</td></tr>
+    <tr><td>unit conversion</td><td><code>out = in × factor</code>, unknown factor</td><td class="pill-good">ratio shortcut (tolerance)</td></tr>
+    <tr><td>transformation</td><td>2 numbers → op + ordering + sign/reverse "style" (digits sometimes disguised as symbols)</td><td class="pill-warn">built; <b>cipher rows shipped</b>, numeric open</td></tr>
+    <tr><td><b>bit</b></td><td>unknown 8-bit → 8-bit boolean transform</td><td class="pill-focus">this page's focus — <code>GATE(f,g,h)</code></td></tr>
+  </table>
+
+  <h3>Custom CoT formats we minted on the BIT generator</h3>
+  <p class="small">Because generation is exact and the solver is a free verifier, we could try format after format and
+     keep only the derivable ones. A sampling of what we generated:</p>
+  <span class="tag">per-bit column scan</span>
+  <span class="tag">whole-byte hypothesis-test (GATE f,g,h)</span>
+  <span class="tag">column-algebra search + derivability lint</span>
+  <span class="tag">state-trace enumerate → observe → prune</span>
+  <span class="tag">compact 1-line candidate dialect</span>
+  <span class="tag">recovery / first-mistake</span>
+  <span class="tag">discriminate (pick the distinguishing example)</span>
+  <span class="tag">DPO negatives (solver-generated)</span>
+  <p class="small">What helped us wasn't any single format — it was having a generator that let us try them all
+     quickly, each oracle-verified. This page focuses on the cleanest one to look at: reading the byte as
+     <code>GATE(f, g, h)</code> instead of bit-by-bit.</p>
+  <p class="small">Beneath the full traces sits a library of <b>239 atomic "mini-skill" drills</b> — each designed from
+     <b>holistic inspection of the model's mistakes</b> (read what it got wrong, build a targeted drill). Browse a random
+     sample in the <a href="miniskills.html" style="color:var(--acc)">mini-skill gallery</a>.</p>
+
+  <!-- ===================================================== -->
+  <h2>2 · The GATE(f, g, h) structure</h2>
+  <p>The per-bit view asks "what produces output bit <code>o[k]</code>?" eight separate times. The whole-byte view
+     asks one question: the output byte is a boolean <b>gate</b> applied across <b>three transformed views (streams)</b> of the input byte <code>x</code>.</p>
+
+  <div class="formula">output = GATE( f(x), g(x), h(x) )</div>
+
+  <p>Each <b>stream</b> is the input byte run through one cheap whole-byte operation. The catalog:</p>
+  <table>
+    <tr><th>Stream</th><th>Operation</th><th>Count</th></tr>
+    <tr><td class="mono">x, ~x</td><td>identity and bitwise complement</td><td>2</td></tr>
+    <tr><td class="mono">shl1..7 / shr1..7</td><td>logical left / right shift by k (zero-fill)</td><td>14</td></tr>
+    <tr><td class="mono">rol1..7 / ror1..7</td><td>rotate left / right by k (wrap-around)</td><td>14</td></tr>
+    <tr><td class="mono">~shl/~shr/~rol/~ror</td><td>complement of each of the above</td><td>28</td></tr>
+  </table>
+  <p class="small"><b>Alias caveat we hit:</b> for an 8-bit byte <code>rol_k == ror_(8−k)</code>, so the 58 named streams are only
+     <b>44 distinct functions</b>. The model literally cannot tell <code>rol1</code> from <code>ror7</code> — they compute the same thing — so any grader that demands the exact <i>name</i> wrongly fails a correct equivalent. <b>In analysis</b> we treat two streams as the same when they share a 256-entry truth table — scoring the <i>function</i>, not the label. <b>Generation</b> itself samples uniformly from the 58 <i>names</i>, so aliases get a label-weighted prior (an aliased rotation is drawn ~1.32× as often); dedup happens only in the analysis, not in the sampler.</p>
+
+  <h3>The gate families (exactly the 11 in <code>generators/bit.py</code>, with its sampling weights)</h3>
+  <p class="small">Weights are the generator's <code>GATE_WEIGHTS</code> — an approximate family frequency over the 1,602
+     competition bit rows we had during the contest (an internal measurement; not a public file). The 4 two-input gates
+     ignore <code>h</code>.</p>
+  <table>
+    <tr><th>Family</th><th>Formula</th><th>Weight</th></tr>
+    <tr><td class="mono">OR_XNOR</td><td class="mono">h | (f&g) | (~f&~g)</td><td class="n">72</td></tr>
+    <tr><td class="mono">GATED_XNOR_NAND (F2)</td><td class="mono">(~h & XNOR(f,g)) | (h & NAND(f,g))</td><td class="n">40</td></tr>
+    <tr><td class="mono">OR</td><td class="mono">f | g</td><td class="n">30</td></tr>
+    <tr><td class="mono">AND</td><td class="mono">f & g</td><td class="n">30</td></tr>
+    <tr><td class="mono">XOR</td><td class="mono">f ^ g</td><td class="n">25</td></tr>
+    <tr><td class="mono">CH (choice)</td><td class="mono">(f & g) | (~f & h)</td><td class="n">5</td></tr>
+    <tr><td class="mono">AND_NOT</td><td class="mono">g & ~f</td><td class="n">3</td></tr>
+    <tr><td class="mono">MAJ3</td><td class="mono">(f&g) | (f&h) | (g&h)</td><td class="n">2</td></tr>
+    <tr><td class="mono">AO</td><td class="mono">(f&g) | h</td><td class="n">2</td></tr>
+    <tr><td class="mono">AX</td><td class="mono">(f&g) ^ h</td><td class="n">2</td></tr>
+    <tr><td class="mono">PAR3</td><td class="mono">f ^ g ^ h</td><td class="n">1</td></tr>
+  </table>
+  <p class="small">Plus plain 2-input byte gates (<code>AND / OR / XOR</code>) over any two streams. The solver also tries all 6
+     permutations of (f,g,h) for non-symmetric families. In our internal solver runs this whole-byte family recovered
+     ~124 of the 137 rows our per-bit decomposition missed (an internal measurement on our own solvers, not reproducible
+     from this public repo alone).</p>
+
+  <!-- ===================================================== -->
+  <h2>3 · Live calculator</h2>
+  <p class="sub">Pick three streams and a gate; the page computes <code>GATE(f(x),g(x),h(x))</code> bit-for-bit in your browser.
+  Try switching the gate to <code>GATED_XNOR_NAND</code> (the hard "F2" family), or set the input to <code>11111111</code> /
+  <code>00000000</code> — the "dead rows" that pin the fewest hypotheses.</p>
+  <div class="panel calc">
+    <div class="grid2">
+      <div>
+        <label>input byte x</label>
+        <input id="x" value="10110010" maxlength="8">
+        <div class="grid2" style="margin-top:6px">
+          <div><label>stream f</label><select id="fs"></select></div>
+          <div><label>stream g</label><select id="gs"></select></div>
+        </div>
+        <div class="grid2">
+          <div><label>stream h</label><select id="hs"></select></div>
+          <div><label>gate</label><select id="gate"></select></div>
+        </div>
+      </div>
+      <div>
+        <label>computation</label>
+        <div class="bitrow"><span class="lab">x</span><span id="rx" class="cells"></span></div>
+        <div class="bitrow"><span class="lab">f(x)</span><span id="rf" class="cells"></span></div>
+        <div class="bitrow"><span class="lab">g(x)</span><span id="rg" class="cells"></span></div>
+        <div class="bitrow"><span class="lab">h(x)</span><span id="rh" class="cells"></span></div>
+        <div class="bitrow out"><span class="lab" style="color:var(--acc)">output</span><span id="ro" class="cells"></span></div>
+        <div class="formula" id="fexpr"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================== -->
+  <h2>4 · How a puzzle is generated (the forward direction)</h2>
+  <p>Solving is the <i>inverse</i> problem. Generation is trivial and deterministic — which is exactly why we can build an exact oracle:</p>
+  <div class="flow" id="genflow"></div>
+  <p>So a generator is just: <b>(1)</b> pick a gate + a stream triple, <b>(2)</b> pick N random input bytes, <b>(3)</b> emit each
+     <code>x → GATE(f(x),g(x),h(x))</code> pair, <b>(4)</b> hold one out as the query. The rule that produced it is known, so the
+     answer — and a fully <i>derivable</i> reasoning trace — is known too. The solver runs this in reverse: enumerate the 44 streams ×
+     gate families, keep the (gate, f, g, h) that reproduces <i>every</i> example, then apply it to the query.</p>
+  <p class="small">A derivability <b>lint</b> guards the traces: every line must be a mechanical consequence of the one before it
+     (no naming a stream without showing the bits that reveal it). That lint doubled as a process-reward signal for the GRPO experiments.</p>
+
+  <!-- ===================================================== -->
+  <h2>5 · What the bit data actually looks like</h2>
+  <p>Two distributions matter. First, the <b>per-bit function mix</b> — our internal measurement over the 12,816 output
+     bits in the 1,602 competition rows we had during the contest (aggregate counts from our own analysis, not a public
+     file) — this is why exotic 3-input families are a trap to over-weight:</p>
+  <div class="panel" id="dist"></div>
+  <p class="small">Read it plainly: <b>54% of bits are just copy-or-constant</b> (COPY 39.9 + CONST 14.1),
+     <b>~99% are 0/1/2-input</b> (the bars above sum to 98.9%), and only <b>~1% genuinely need a 3-input gate</b>. This
+     matters for <i>generation</i>: sampling gate families uniformly badly
+     misrepresents the real data (it floods you with exotic 3-input gates that barely occur). Our generator weights
+     families to the empirical mix, so the synthetic data looks like the competition data.</p>
+
+  <h3>Why bit is solvable: a search for ANSWERS, not FUNCTIONS</h3>
+  <div class="kpi">
+    <div><b>89,086</b><span>distinct whole-byte functions — this class reproduces <b>100%</b> of the real BIT puzzles</span></div>
+    <div><b>~58%</b><span>of the time the exact RULE is uniquely pinned (search for the function)</span></div>
+    <div><b>~83%</b><span>of the time the ANSWER is forced — all consistent rules agree (search for the answer)</span></div>
+    <div><b>~99%</b><span>answer via OCCAM — pick the simplest consistent rule (reproducible on random examples)</span></div>
+  </div>
+  <p>Two framings. <b>Search for the function</b> (recover the exact rule): the rule is uniquely determined ~58% of the
+     time. <b>Search for the answer</b> (predict the query output): the answer is logically forced ~83% of the time, a
+     random consistent rule matches it ~93%, and the simplest consistent rule (<b>Occam on arity</b> — lowest gate-arity
+     + simplest streams) matches it ~99%. Random over all functions (ignoring the examples) is 0.39%. We spent most of our
+     time on function search; answer search is what a frequency/simplicity prior — like Tong's per-column method — uses.
+     <span class="small">(Computed on the real puzzles, reproducible on random examples:
+     <code>analysis/occam_solver.py --stats</code> and the <code>--demo</code> "Autotracer".)</span></p>
+  <p class="small">One structural fact: <b>2,266 / 65,536</b> conceivable single (x→y) pairs are unreachable by <i>any</i>
+     gate in our enumerated whole-byte family — an unreachable pair <i>falsifies</i> the single-shared-gate model (it
+     doesn't rule out arbitrary whole-byte functions); in our corpus those were per-output-bit rows. And the 58 stream
+     names cover only <b>44 distinct functions</b> — for answering the query only the <i>function</i> matters, never the
+     label.</p>
+  <div class="panel" style="border-color:#1d4a72">
+    <b>↳ See it interactively:</b> <a href="over-determination.html" style="color:var(--acc)">over-determination.html</a>
+    — sample K examples from a rule and watch hypotheses get killed off one at a time, with the exact
+    "uniquely determined?" verdict. More structural notes per puzzle type in
+    <a href="insights.html" style="color:var(--acc)">insights.html</a>.
+  </div>
+
+  <h2>6 · The CoT formats were search traces — approaches &amp; papers</h2>
+  <p>We came to see most of the custom CoT formats as <b>search traces</b>: enumerate candidate rules, test against the
+     examples, prune, lock. We read the search-supervision literature and borrowed its training shapes. We <i>hoped</i>
+     one thing would be our edge: our solver is an exact, free verifier of every intermediate state, so the
+     weak/learned-verifier bottleneck the literature describes wouldn't apply to us. It didn't translate into a solving
+     win for us — see §7.</p>
+  <p class="scope"><b>Our initial framing — recursive bisection.</b> The instinct we started from: to get from a state
+     <code>A</code> to the goal <code>Z</code>, if the model can't do it in one shot, introduce an intermediate
+     waypoint <code>N</code>, solve <code>A→N</code> and <code>N→Z</code> separately, and keep bisecting until every hop
+     is trivially solvable. That divide-and-conquer / sub-goal instinct is what sent us to the literature; the shapes
+     below are its trainable form (enumerate → verify → prune, with the solver checking each hop).</p>
+  <ul class="refs">
+    <li><b>Teach-long, explicit enumerate→test→prune SFT</b> — every step a solver-checkable
+        state→action→observation→prune transition; rejected branches shown in-trace (contrastive CoT for free).</li>
+    <li><b>STaR / expert-iteration trim</b> — <i>inspired by</i> Zelikman et al., <i>STaR</i> (2022) and Lehnert et al.,
+        <i>Searchformer / "Beyond A*"</i> (2024). Those papers filter sampled rationales / learn A* search dynamics and
+        bootstrap shorter traces; the "keep the shortest <i>verified</i> trace under a declining length budget, else the
+        canonical trace" rule is <i>our</i> adaptation, not their method.</li>
+    <li><b>GRPO process / progress reward</b> — GRPO is from Shao et al., <i>DeepSeekMath</i> (2024, arXiv:2402.03300);
+        the Hamming-distance and "gold still reachable" rewards are <i>our</i> proposed shaping, not from that paper.</li>
+    <li><b>Step-level process supervision</b> (Lightman et al., <i>Let's Verify Step by Step</i>, 2023) — our solver hands
+        out the earliest-wrong-step label for free, so process supervision costs nothing.</li>
+    <li><b>Off the table at submission:</b> tree-of-thought / MCTS / self-consistency — competition inference is greedy
+        single-pass, so these were training-data tools only, never inference-time search.</li>
+  </ul>
+
+  <h2>7 · Scope, honesty &amp; what's unexplored</h2>
+  <div class="scope"><b>What this is:</b> a way to <i>show</i> and <i>generate</i> BIT (and the other types), and a
+     generator substrate that made trying many custom CoT formats cheap and verifiable. <b>What it isn't:</b> a training
+     recipe that teaches the model to solve gates, or a leaderboard claim.</div>
+  <p><b>Transformations — mostly unexplored, but the cipher rows are what shipped.</b> We didn't push <i>numeric</i>
+     CoT-format experimentation. The piece that did get used: the <b>cipher (cryptarithm) transform rows</b> from the
+     same generator — about <b>2,500 verified rows</b> (a CSP solve for the symbol→digit map plus honest priors) — were
+     the one part of our own work that made it into our best scoring blend, on top of a strong public CoT base. Honest
+     caveat: we couldn't cleanly attribute how much they added, and cipher-type accuracy stayed ~7.5%. The numeric lane
+     remains the most open.</p>
+  <p><b>In hindsight, we likely needed more training.</b> We earmarked about <b>$150</b> — roughly <b>$100 for
+     Tinker</b> (LoRA SFT / RL) and <b>~$50 / ~600 credits for Colab Pro+</b>. We kept each <b>experiment</b> cheap —
+     only about <b>$2 of Tinker compute apiece</b> — by running lots of small steps rather than a few big runs. Exact,
+     free oracles mean every generated trace is usable without human labels or a learned verifier. <b>Having CODEX (an
+     agent) manage the Tinker runs end-to-end saved a lot of money</b> — and bought serious volume: roughly <b>950
+     Tinker runs</b> (≈500 training + ≈450 eval) over <b>~33 days</b>, ~175 training-data builds, the BIT trace format
+     revised through 30-plus numbered versions (up to V35), and 256 automated agent handoff notes.</p>
+  <p><b>Where the time went, and what our final submission actually was.</b> Most of our effort went into trying to
+     teach the model a <i>different</i> search method for BIT (the bisection / enumerate-test-prune work in §6). That
+     bulk of the work never became a finished submission. We had hoped to transfer the search ability into the 30B; in
+     the end our best end-to-end BIT result there was only about <b>12%</b>. Our final leaderboard entry was small and
+     almost incidental — we were just testing whether our cipher (cryptarithm) rows added any lift — and by the time we
+     looked up, we'd run out of time.</p>
+  <p><b>If we went again, we'd prototype search-teaching on a small model first.</b> The work became an exercise in
+     trying to teach an LLM to <i>search</i>, and iterating that on a 30B is slow. Much of what seems to matter — trace
+     shape, length budget, verifier-gated trimming, where the model fakes a step — <i>looks</i> largely model-agnostic,
+     so we suspect those lessons would transfer up from a smaller model at a fraction of the cost per cycle. We can't
+     prove it; it's the bet we'd make next time.</p>
+  <div class="scope"><b>Why we're sharing work that hasn't paid off yet.</b> It hasn't produced a meaningful result for
+     us <i>so far</i> — ~12% end-to-end. Whether that was a failure on our part or something more fundamental, we
+     honestly don't know. We suspect the missing piece may be mundane — not training long enough, the wrong-sized model,
+     too small a budget. So we've included lots of <b>training traces</b> (the 5,891-row mini-skill dump and the CoT
+     formats) to give others ideas to build on. Putting it in the open seems like the fastest way for someone to spot
+     what we missed — that's the point of an open contribution.</div>
+
+  <p class="small" style="margin-top:30px;color:var(--line)">In this repo: <code>generators/</code> (create the puzzles —
+     forward samplers), <code>over-determination.html</code> (interactive over-solve explorer),
+     <code>miniskills.html</code> (gallery: 233 of 239 registered skills), <code>insights.html</code> (the write-up).</p>
+
+</div>
+
+<script>
+// ---- byte ops -------------------------------------------------
+const M=0xFF;
+const rol=(x,k)=>((x<<k)|(x>>(8-k)))&M;
+const ror=(x,k)=>((x>>k)|(x<<(8-k)))&M;
+function streams(){
+  const s=[["x",x=>x&M],["~x",x=>(~x)&M]];
+  for(let k=1;k<8;k++){
+    s.push([`shl${k}`,x=>(x<<k)&M]); s.push([`shr${k}`,x=>(x>>k)&M]);
+    s.push([`rol${k}`,x=>rol(x,k)]); s.push([`ror${k}`,x=>ror(x,k)]);
+    s.push([`~shl${k}`,x=>(~(x<<k))&M]); s.push([`~shr${k}`,x=>(~(x>>k))&M]);
+    s.push([`~rol${k}`,x=>(~rol(x,k))&M]); s.push([`~ror${k}`,x=>(~ror(x,k))&M]);
+  }
+  return s;
+}
+const SRC=streams();
+const GATES=[
+  ["OR_XNOR (h | XNOR(f,g))",(f,g,h)=>(h|(f&g)|((~f)&(~g)))&M],
+  ["GATED_XNOR_NAND / F2",(f,g,h)=>(((~h)&((f&g)|((~f)&(~g))))|(h&(~(f&g))))&M],
+  ["CH (f&g)|(~f&h)",(f,g,h)=>((f&g)|((~f)&h))&M],
+  ["MAJ3",(f,g,h)=>((f&g)|(f&h)|(g&h))&M],
+  ["PAR3 (f^g^h)",(f,g,h)=>(f^g^h)&M],
+  ["AO (f&g)|h",(f,g,h)=>((f&g)|h)&M],
+  ["AX (f&g)^h",(f,g,h)=>((f&g)^h)&M],
+  ["AND (f&g)",(f,g,h)=>(f&g)&M],
+  ["OR (f|g)",(f,g,h)=>(f|g)&M],
+  ["XOR (f^g)",(f,g,h)=>(f^g)&M],
+  ["AND_NOT (g&~f)",(f,g,h)=>(g&(~f))&M],
+];
+// NOTE: these 11 gates mirror generators/bit.py exactly (the 4 two-input gates
+// AND/OR/XOR/AND_NOT ignore h). Verified by tools check; keep in sync with the generator.
+// ---- helpers --------------------------------------------------
+const $=id=>document.getElementById(id);
+const tob=v=>(v&M).toString(2).padStart(8,'0');
+function cells(host,bits){
+  host.innerHTML='';
+  for(const b of bits.split('')){
+    const d=document.createElement('span');
+    d.className='cell '+(b==='1'?'one':'zero'); d.textContent=b;
+    host.appendChild(d);
+  }
+}
+function fillSel(sel,opts,def){
+  sel.innerHTML=''; opts.forEach((o,i)=>{
+    const e=document.createElement('option'); e.value=i; e.textContent=o; sel.appendChild(e);
+  }); sel.value=def;
+}
+// populate selects
+fillSel($('fs'),SRC.map(s=>s[0]),0);            // x
+fillSel($('gs'),SRC.map(s=>s[0]),2+0);          // shl1
+fillSel($('hs'),SRC.map(s=>s[0]),4+1);          // shr2-ish
+fillSel($('gate'),GATES.map(g=>g[0]),0);
+
+function render(){
+  let raw=$('x').value.replace(/[^01]/g,'').slice(0,8).padStart(8,'0');
+  const x=parseInt(raw,2)||0;
+  const fi=+$('fs').value, gi=+$('gs').value, hi=+$('hs').value, ki=+$('gate').value;
+  const f=SRC[fi][1](x), g=SRC[gi][1](x), h=SRC[hi][1](x);
+  const o=GATES[ki][1](f,g,h);
+  cells($('rx'),tob(x)); cells($('rf'),tob(f)); cells($('rg'),tob(g)); cells($('rh'),tob(h)); cells($('ro'),tob(o));
+  $('fexpr').textContent =
+    `f=${SRC[fi][0]}  g=${SRC[gi][0]}  h=${SRC[hi][0]}\n`+
+    `${GATES[ki][0].split(' ')[0]}(${tob(f)}, ${tob(g)}, ${tob(h)}) = ${tob(o)}`;
+}
+['x','fs','gs','hs','gate'].forEach(id=>$(id).addEventListener('input',render));
+render();
+
+// ---- generation flow demo (deterministic) ---------------------
+(function(){
+  const fi=0,gi=2,hi=11,ki=0; // x, shl1, shr2, OR_XNOR
+  const inputs=[0b10110010,0b01101001,0b11001100,0b00011110,0b10101010];
+  let out=`# GENERATE one bit puzzle\n`;
+  out+=`pick gate   = ${GATES[ki][0].split(' ')[0]}  ->  h | XNOR(f,g)\n`;
+  out+=`pick streams= f:${SRC[fi][0]}  g:${SRC[gi][0]}  h:${SRC[hi][0]}\n\n`;
+  out+=`for each random input x, emit  x -> GATE(f(x),g(x),h(x)):\n`;
+  inputs.forEach((x,i)=>{
+    const f=SRC[fi][1](x),g=SRC[gi][1](x),h=SRC[hi][1](x);
+    const o=GATES[ki][1](f,g,h);
+    const tag = i===inputs.length-1 ? '   <- hold out as QUERY' : '';
+    out+=`  ${tob(x)} -> ${tob(o)}${tag}\n`;
+  });
+  out+=`\n# SOLVE = run it backwards: find the (gate,f,g,h) that\n`;
+  out+=`#         reproduces EVERY pair, then apply to the query.`;
+  document.getElementById('genflow').textContent=out;
+})();
+
+// ---- per-bit distribution bars --------------------------------
+(function(){
+  const D=[
+    ["identity (COPY)",39.9],["CONST",14.1],["AND",12.4],["OR",10.3],["XOR",7.9],
+    ["XNOR",6.8],["NOT",5.3],["NOR",1.2],["NAND",1.0],["CHOICE",0.6],
+    ["MAJORITY3",0.3],["PARITY3",0.1],["4-input TT",0.03],["5-input",0.008]
+  ];
+  const max=Math.max(...D.map(d=>d[1]));
+  let h='<table><tr><th>per-bit function</th><th>share</th><th></th></tr>';
+  for(const [n,p] of D){
+    h+=`<tr><td class="mono">${n}</td><td class="n">${p}%</td>`+
+       `<td><span class="bar" style="width:${(p/max*260).toFixed(0)}px"></span></td></tr>`;
+  }
+  h+='</table>';
+  document.getElementById('dist').innerHTML=h;
+})();
+</script>
+</body>
+</html>

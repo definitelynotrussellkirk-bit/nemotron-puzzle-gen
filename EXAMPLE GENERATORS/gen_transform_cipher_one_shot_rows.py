@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Generate audited visible-only cipher TRANS_ONE_SHOT_V1 rows.
+
+The solve path is:
+
+TRANS_ROUTE_V1 -> CIPHER_MAP_V1 -> TRANS_ONE_SHOT_V1
+
+The stored answer is not passed to the cipher solver. It is used only after
+prediction to filter rows that are safe for supervised training.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import os
+from collections import Counter
+from datetime import datetime, timezone
+
+from generators.trace_transform import build_cipher_one_shot_trace
+from generators.transform_router import (
+    extract_examples_and_query,
+    is_transformation_prompt,
+    route_transform_prompt,
+)
+from solvers.cipher_digit import find_op_pos, solve as cipher_solve
+from training.data import BOXED_INSTRUCTION
+
+
+def _assistant_content(trace_text: str, answer: str) -> str:
+    if "{" in answer or "}" in answer:
+        return f"<think>\n{trace_text}\n</think>\nThe final answer is: {answer}"
+    return f"<think>\n{trace_text}\n</think>\n\\boxed{{{answer}}}"
+
+
+def build_rows(train_csv: str, out: str, summary_out: str, timeout: float) -> dict:
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    counters = Counter()
+    rows = []
+
+    with open(train_csv) as f:
+        for row in csv.DictReader(f):
+            prompt = row["prompt"]
+            if not is_transformation_prompt(prompt):
+                continue
+            counters["transform_rows"] += 1
+            rid = str(row.get("id", ""))
+            answer = row.get("answer", "")
+            route = route_transform_prompt(prompt, row_id=rid, stable_trace_ids=set())
+            if route["surface"] != "cipher_digit":
+                continue
+            counters["cipher_rows"] += 1
+            if route["program"] != "TRANS_ONE_SHOT_V1":
+                counters[f"skip_route:{route['program']}"] += 1
+                continue
+
+            result = cipher_solve(prompt, answer=None, timeout=timeout)
+            if not result:
+                counters["visible_solve_fail"] += 1
+                continue
+            pred = result.get("answer")
+            if pred != answer:
+                counters["prediction_mismatch"] += 1
+                continue
+
+            examples, query = extract_examples_and_query(prompt)
+            op_pos = result.get("op_pos") or find_op_pos(examples, query, None)
+            if op_pos is None:
+                counters["op_pos_fail"] += 1
+                continue
+            trace = build_cipher_one_shot_trace(
+                examples,
+                query,
+                answer,
+                result["mapping"],
+                op_pos,
+            )
+            if trace is None:
+                counters["trace_builder_reject"] += 1
+                continue
+            trace_text, trace_pred = trace
+            if trace_pred != answer:
+                counters["trace_prediction_mismatch"] += 1
+                continue
+            if "???" in trace_text or "???" in answer:
+                counters["placeholder_reject"] += 1
+                continue
+
+            rows.append({
+                "messages": [
+                    {"role": "user", "content": prompt + BOXED_INSTRUCTION},
+                    {"role": "assistant", "content": _assistant_content(trace_text, answer)},
+                ],
+                "answer": answer,
+                "id": rid,
+                "puzzle_type": "transformation",
+                "mode": "cipher_one_shot_visible",
+                "generator": "gen_transform_cipher_one_shot_rows",
+                "route_program": route["program"],
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            counters["rows"] += 1
+
+    with open(out, "w") as f:
+        for row in rows:
+            f.write(json.dumps(row) + "\n")
+    summary = {
+        "out": out,
+        "timeout": timeout,
+        "counters": dict(counters),
+    }
+    with open(summary_out, "w") as f:
+        json.dump(summary, f, indent=2)
+        f.write("\n")
+    return summary
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--train-csv", default="data/competition/train.csv")
+    parser.add_argument("--out", default="data/transformation/pool/competition/cipher_one_shot_visible.jsonl")
+    parser.add_argument("--summary", default="data/transformation/pool/competition/cipher_one_shot_visible.summary.json")
+    parser.add_argument("--timeout", type=float, default=0.25)
+    args = parser.parse_args()
+    print(json.dumps(build_rows(args.train_csv, args.out, args.summary, args.timeout), indent=2))
+
+
+if __name__ == "__main__":
+    main()

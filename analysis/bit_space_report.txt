@@ -1,0 +1,27 @@
+[exact] named streams            : 58
+[exact] distinct stream functions: 44 (alias factor 1.318x)
+[exact] syntactic hypotheses     : 1,379,240
+[exact] distinct induced functions: 89,086
+[exact] unreachable (x->y) pairs : 2,266 / 65,536
+[exact] assertions passed: matches the numbers quoted in the write-up.
+
+[monte-carlo] N=2000 samples, seed=0 (estimates):
+  k | median surv | mean surv | function unique | query determined | random-survivor query-acc
+   1 |         730 |    1346.5 |            0.0% |             0.0% | 11.6%
+   2 |          39 |     142.8 |            2.0% |             7.3% | 42.0%
+   3 |          10 |      48.8 |           11.2% |            29.5% | 65.1%
+   4 |           5 |      21.7 |           20.1% |            46.8% | 76.4%
+   5 |           3 |      12.5 |           27.9% |            58.4% | 82.4%
+   6 |           2 |       8.5 |           35.6% |            67.1% | 86.3%
+   7 |           2 |       6.1 |           43.5% |            74.1% | 89.1%
+   8 |           2 |       4.7 |           49.9% |            78.8% | 91.1%
+   9 |           1 |       3.7 |           55.5% |            82.2% | 92.4%
+  10 |           1 |       3.0 |           60.9% |            85.6% | 93.8%
+  ('random-survivor query-acc' = a random function CONSISTENT with the k examples,
+   right on the query. Baselines: random over ALL functions ~ 1/256 = 0.39%.
+   NB: these use RANDOM example inputs; the competition's train.csv examples are
+   NOT random, so real over-determination is likely even higher.)
+
+  total function class: log2(89086) = 16.4 bits
+  first-example reduction: median 730 survivors  => ~6.9 bits gained (mean elimination 98.49%; uniform-8-bit ceiling 99.61%)
+  NOTE: percentages above are Monte-Carlo estimates (vary with --seed/--samples).

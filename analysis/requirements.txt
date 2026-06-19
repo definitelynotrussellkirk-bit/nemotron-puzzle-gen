@@ -1,0 +1,1 @@
+numpy>=1.21  # only analysis/measure_bit_space.py needs this; the six generators are stdlib-only

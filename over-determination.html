@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BIT Gate Explorer — shapes & bijectivity over all 256 inputs</title>
+<style>
+:root{--bg:#0f1115;--panel:#181b22;--ink:#e6e9ef;--mut:#9aa4b2;--acc:#4fa3ff;--good:#43c06a;--bad:#e9573f;--grid:#262b34}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--ink)}
+header{padding:14px 20px;border-bottom:1px solid var(--grid);background:#11141a}
+h1{font-size:17px;margin:0 0 3px} .sub{color:var(--mut);font-size:12px}
+nav{display:flex;gap:4px;padding:8px 20px;background:#11141a;border-bottom:1px solid var(--grid);flex-wrap:wrap}
+nav button{background:var(--panel);color:var(--ink);border:1px solid var(--grid);padding:6px 12px;border-radius:7px;cursor:pointer;font-size:13px}
+nav button.on{background:var(--acc);border-color:var(--acc);color:#06121f;font-weight:600}
+main{padding:18px 20px;max-width:1180px}
+.view{display:none} .view.on{display:block}
+.row{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+.card{background:var(--panel);border:1px solid var(--grid);border-radius:10px;padding:14px}
+label{color:var(--mut);font-size:12px;display:block;margin-bottom:3px}
+select,input{background:#0d1016;color:var(--ink);border:1px solid var(--grid);border-radius:6px;padding:6px 8px;font:13px ui-monospace,Menlo,monospace}
+.ctl{display:inline-block;margin-right:12px;margin-bottom:8px}
+canvas{image-rendering:pixelated;border:1px solid var(--grid);border-radius:6px;background:#0d1016}
+.badge{display:inline-block;padding:3px 9px;border-radius:20px;font-weight:600;font-size:12px}
+.b-good{background:rgba(67,192,106,.16);color:var(--good);border:1px solid var(--good)}
+.b-bad{background:rgba(233,87,63,.14);color:var(--bad);border:1px solid var(--bad)}
+.mono{font-family:ui-monospace,Menlo,monospace}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:5px 8px;border-bottom:1px solid var(--grid);text-align:left}
+th{color:var(--mut);font-weight:600}
+.bar{height:13px;border-radius:3px;background:linear-gradient(90deg,var(--good),#7be0a0)}
+.barwrap{background:#0d1016;border-radius:3px;overflow:hidden;width:200px;display:inline-block;vertical-align:middle;border:1px solid var(--grid)}
+.hint{color:var(--mut);font-size:12px;margin:6px 0 12px;max-width:760px}
+.kv{color:var(--mut)} .kv b{color:var(--ink)}
+.pill{display:inline-block;padding:2px 7px;margin:2px;border-radius:5px;font-size:11px;font-family:ui-monospace,monospace}
+.p-can{background:rgba(79,163,255,.14);color:var(--acc);border:1px solid #2b5a8c}
+.p-no{background:rgba(233,87,63,.1);color:var(--bad);border:1px solid #5c2a22}
+small{color:var(--mut)}
+.hist{display:flex;align-items:flex-end;height:90px;gap:3px}
+.hist .col{flex:1;background:var(--acc);border-radius:2px 2px 0 0;min-height:1px;position:relative}
+.hist .col span{position:absolute;bottom:-16px;left:0;right:0;text-align:center;font-size:10px;color:var(--mut)}
+</style></head><body>
+<header><h1>BIT Gate Explorer — shapes &amp; bijectivity over all 256 inputs</h1>
+<div class="sub">out = GATE(f(x), g(x) [, h(x)]). Streams = rotations/shifts (±invert). All math runs live in your browser over every byte 0–255. Gate definitions were cross-checked against the bit rows we had during the contest (each family reproduced the expected outputs).</div>
+<div class="sub" style="margin-top:6px">Also referred to as the <b>over-determination explorer</b>: the <b>Example discriminator</b>, <b>Rank 10 examples</b>, and <b>Prune-order solver</b> tabs show how the search space <b>collapses</b> as examples rule out hypotheses. The 194,400 figure here = enumerated gate×operand hypotheses in <i>this page's reduced catalog</i> (30 stream names × a smaller gate set), which dedups to 23,377 distinct <i>functions</i>.</div>
+<div class="sub" style="margin-top:6px;color:#e8b339"><b>Scope:</b> the counts on this page belong to the catalog embedded in this page. The <i>released</i> <code>generators/bit.py</code> samples a larger space (58 stream names → 44 functions, 11 gates → 1,379,240 syntactic rules → <b>89,086</b> distinct functions). The headline statistics quoted in the write-up are recomputed on that generator space by <code>analysis/measure_bit_space.py</code> — so they differ from the absolute counts shown here.</div>
+<div style="margin-top:8px;font-size:13px">↩ <a href="index.html" style="color:#58a6ff">BIT viewer</a> &nbsp;·&nbsp; <a href="insights.html" style="color:#58a6ff">insights</a> &nbsp;·&nbsp; <a href="miniskills.html" style="color:#58a6ff">mini-skills</a></div></header>
+<nav>
+<button class="on" data-v="explore">Explorer</button>
+<button data-v="families">Bijectivity / Lossy</button>
+<button data-v="inverse">Post-image &rarr; families</button>
+<button data-v="disc">Example discriminator</button>
+<button data-v="ranking">Rank 10 examples</button>
+<button data-v="prune">Prune-order solver</button>
+<button data-v="about">Notes</button>
+</nav>
+<main>
+
+<section class="view on" id="explore">
+ <div class="ctl"><label>gate</label><select id="gate"></select></div>
+ <div class="ctl"><label>f</label><select id="f"></select></div>
+ <div class="ctl"><label>g</label><select id="g"></select></div>
+ <div class="ctl"><label>h (3-input only)</label><select id="h"></select></div>
+ <div class="hint">The 16×16 image is the whole function: cell (row r, col c) is input byte 16r+c, colored by its output byte. A clean gradient ⇒ structured; a permutation ⇒ <b>bijective</b> (every output appears exactly once).</div>
+ <div class="row">
+   <div class="card"><label>256→256 mapping (color = output byte)</label><canvas id="map" width="256" height="256" style="width:256px;height:256px"></canvas>
+     <div style="margin-top:8px" id="bijbadge"></div></div>
+   <div class="card" style="min-width:300px"><label>output popcount distribution (the "shape")</label>
+     <div class="hist" id="hist"></div><div style="height:18px"></div>
+     <div class="kv" id="stats"></div></div>
+   <div class="card"><label>transfer: P(out popcount | in popcount)</label>
+     <canvas id="trans" width="180" height="180" style="width:180px;height:180px"></canvas>
+     <div><small>x=in popcount, y=out popcount (bottom→top 0..8). Cyan diagonal = popcount-preserving.</small></div></div>
+ </div>
+</section>
+
+<section class="view" id="families">
+ <div class="hint">Over all base-stream operand combos (30 streams), what fraction of each gate family is <b>bijective</b> (information-preserving permutation) vs <b>lossy</b> (many inputs collapse to one output). Only the linear XOR-family and rotations are substantially bijective; everything with AND/OR is mostly lossy.</div>
+ <div class="card"><table id="famtab"><thead><tr><th>gate</th><th>arity</th><th>bijective</th><th>% bijective</th><th></th><th>lossy</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section class="view" id="inverse">
+ <div class="hint">Enter an observed <b>output byte (post-image)</b>. We show which gate families can produce it from <i>some</i> input+operands (over base streams) and which are <b>ruled out</b>. Honest caveat: with operands free to invert/shift, most families can reach most outputs — popcount alone rarely eliminates a family. The real discriminator is the joint pattern across rows (use the Discriminator tab).</div>
+ <div class="ctl"><label>output byte</label><input id="postimg" class="mono" value="11101010" size="10"></div>
+ <div class="card" id="invout"></div>
+</section>
+
+<section class="view" id="disc">
+ <div class="hint">Watch the 194,400 (gate×operands) hypotheses get <b>killed example-by-example, in order</b>. Sample K random examples from a known rule, or paste your own. Each step shows how many hypotheses (and which families) die. <b>Shuffle</b> to see that the <i>final</i> survivor set is order-independent but <i>which example lands the kill</i> changes. If examples kill <b>all</b> families, no single whole-byte gate fits them (different rules, or a per-bit "real row").</div>
+ <div class="card" style="margin-bottom:12px"><b>Generate K random examples from a rule:</b>
+   <div style="margin-top:8px">
+   <span class="ctl"><label>gate</label><select id="srGate"></select></span>
+   <span class="ctl"><label>f</label><select id="srF"></select></span>
+   <span class="ctl"><label>g</label><select id="srG"></select></span>
+   <span class="ctl"><label>h</label><select id="srH"></select></span>
+   <span class="ctl"><label>K (1-10)</label><input id="srK" type="number" min="1" max="10" value="4" style="width:56px"></span>
+   <span class="ctl"><label>&nbsp;</label><button onclick="randomRule()" style="background:var(--panel);color:var(--ink);border:1px solid var(--grid);padding:6px 11px;border-radius:7px;cursor:pointer">🎲 random rule</button></span>
+   <span class="ctl"><label>&nbsp;</label><button onclick="sampleEx()" style="background:var(--acc);color:#06121f;border:none;padding:6px 12px;border-radius:7px;font-weight:600;cursor:pointer">sample K examples</button></span>
+   </div></div>
+ <div class="ctl"><label>examples (input -&gt; output per line — editable)</label><br><textarea id="ex" rows="6" cols="34" class="mono" style="background:#0d1016;color:var(--ink);border:1px solid var(--grid);border-radius:6px;padding:8px">10101001 -> 00011100
+01011010 -> 11111101</textarea></div>
+ <div class="ctl"><label>&nbsp;</label><br><button onclick="runDisc()" style="background:var(--acc);color:#06121f;border:none;padding:8px 14px;border-radius:7px;font-weight:600;cursor:pointer">show kill math (this order)</button>
+   <button onclick="shuffleEx()" style="background:var(--panel);color:var(--ink);border:1px solid var(--grid);padding:8px 12px;border-radius:7px;cursor:pointer;margin-left:6px">🔀 shuffle order &amp; rerun</button></div>
+ <div class="card" id="discout"></div>
+ <div class="card" style="margin-top:14px"><label>discriminating power of each input byte (distinct outputs across all hypotheses)</label>
+   <canvas id="dpi" width="512" height="120" style="width:100%;max-width:760px;height:120px"></canvas>
+   <div id="dpitop"></div></div>
+</section>
+
+<section class="view" id="ranking">
+ <div class="hint">Sample a hidden rule and 10 examples, then rank them <b>most &rarr; least informative</b> — each scored by the fraction of the 194,400 candidate hypotheses its (input&rarr;output) eliminates. Computed live in your browser from the embedded catalog (no file is read). Note how dense inputs with non-generic outputs dominate and all-0/single-bit rows sink to the bottom.</div>
+ <div class="ctl"><label>&nbsp;</label><br>
+   <button onclick="sampleRanking()" style="background:var(--acc);color:#06121f;border:none;padding:8px 14px;border-radius:7px;font-weight:600;cursor:pointer">🎲 new rule + 10 examples</button>
+   <button onclick="sampleRanking(true)" style="background:var(--panel);color:var(--ink);border:1px solid var(--grid);padding:8px 12px;border-radius:7px;cursor:pointer;margin-left:6px">include a dead row</button>
+ </div>
+ <div class="card" id="rankout"></div>
+</section>
+
+<section class="view" id="prune">
+ <div class="hint">The <b>prune-order decision procedure</b>: check rule-types cheapest-to-prune first. Step 0 = rotation (popcount-preserved). Then gate families in order of <b>flexibility</b> (smaller reachable set = killed more easily = check first). For each: the cheap reach pre-filter says DEAD (skip, no search) or ALIVE; if alive, the exact #operand-combos that fit. You stop at the first family that resolves the rule; the flexible GATE3 residual (CH/F2/OR_XNOR/PAR3) is only reached if everything simpler is dead.</div>
+ <div class="ctl"><label>examples (input -&gt; output per line)</label><br><textarea id="pex" rows="6" cols="34" class="mono" style="background:#0d1016;color:var(--ink);border:1px solid var(--grid);border-radius:6px;padding:8px"></textarea></div>
+ <div class="ctl"><label>&nbsp;</label><br>
+   <button onclick="runPrune()" style="background:var(--acc);color:#06121f;border:none;padding:8px 14px;border-radius:7px;font-weight:600;cursor:pointer">run prune order</button>
+   <button onclick="samplePrune()" style="background:var(--panel);color:var(--ink);border:1px solid var(--grid);padding:8px 12px;border-radius:7px;cursor:pointer;margin-left:6px">🎲 random rule (8 examples)</button></div>
+ <div class="card" id="pruneout"></div>
+</section>
+
+<section class="view" id="about">
+ <div class="card" style="max-width:820px">
+ <h3>Gate definitions (cross-checked against the bit rows we had during the contest — internal; competition data not included)</h3>
+ <table><tbody>
+ <tr><td class="mono">AND/OR/XOR</td><td>a&amp;b / a|b / a^b</td></tr>
+ <tr><td class="mono">NAND/NOR/XNOR</td><td>~(a&amp;b) / ~(a|b) / ~(a^b)</td></tr>
+ <tr><td class="mono">MAJ3</td><td>(a&amp;b)|(a&amp;c)|(b&amp;c) — majority</td></tr>
+ <tr><td class="mono">CH</td><td>(a&amp;b)|(~a&amp;c) — a selects b vs c</td></tr>
+ <tr><td class="mono">PAR3</td><td>a^b^c — parity</td></tr>
+ <tr><td class="mono">OR_XNOR</td><td><b>h | XNOR(f,g)</b> — OR-term is the 3rd operand</td></tr>
+ <tr><td class="mono">F2 (GATED_XNOR_NAND)</td><td>(~c &amp; XNOR(a,b)) | (c &amp; NAND(a,b)) — c selects XNOR vs NAND. Symmetric in a,b. The hardest to crack by hand.</td></tr>
+ <tr><td class="mono">AO / AX</td><td>(f&amp;g)|h / (f&amp;g)^h</td></tr>
+ </tbody></table>
+ <p class="kv">Streams: <b>x, ~x</b>, and for k=1..7: <b>shl/shr/rol/ror</b> and their inverts. shl/shr zero-fill (lossy at the edge); rol/ror wrap (permutations). Convention: index 0 = leftmost bit.</p>
+ <p class="kv"><b>Headline:</b> 83.7% of all gate×operand combos are <b>lossy</b>. Only XOR/XNOR/PAR3 (linear) and pure rotations are commonly bijective. F2 is 1-dominant (5/8 of its truth table) which is why sparse inputs explode to dense outputs.</p>
+ </div>
+</section>
+
+</main>
+<script>
+const DATA = {"base": ["x", "~x", "shl1", "shr1", "rol1", "ror1", "shl2", "shr2", "rol2", "ror2", "shl3", "shr3", "rol3", "ror3", "shl4", "shr4", "rol4", "ror4", "shl5", "shr5", "rol5", "ror5", "shl6", "shr6", "rol6", "ror6", "shl7", "shr7", "rol7", "ror7"], "fam": {"AND": {"arity": 2, "tot": 900, "bij": 30}, "OR": {"arity": 2, "tot": 900, "bij": 100}, "XOR": {"arity": 2, "tot": 900, "bij": 374}, "NAND": {"arity": 2, "tot": 900, "bij": 30}, "NOR": {"arity": 2, "tot": 900, "bij": 100}, "XNOR": {"arity": 2, "tot": 900, "bij": 374}, "MAJ3": {"arity": 3, "tot": 27000, "bij": 2752}, "CH": {"arity": 3, "tot": 27000, "bij": 1138}, "PAR3": {"arity": 3, "tot": 27000, "bij": 14896}, "OR_XNOR": {"arity": 3, "tot": 27000, "bij": 32}, "F2": {"arity": 3, "tot": 27000, "bij": 2114}, "AO": {"arity": 3, "tot": 27000, "bij": 4108}, "AX": {"arity": 3, "tot": 27000, "bij": 5974}}, "ach": {"AND": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "OR": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "XOR": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "NAND": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "NOR": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "XNOR": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "MAJ3": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "CH": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "PAR3": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "OR_XNOR": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "F2": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "AO": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], "AX": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}, "dpi": [2, 151, 151, 218, 151, 210, 220, 231, 151, 243, 210, 256, 222, 256, 234, 202, 151, 208, 243, 256, 208, 238, 256, 256, 222, 256, 256, 256, 234, 256, 202, 240, 151, 250, 208, 256, 241, 256, 256, 256, 208, 256, 238, 256, 256, 256, 256, 256, 222, 256, 256, 252, 256, 256, 256, 256, 234, 256, 256, 256, 202, 256, 240, 228, 151, 244, 250, 256, 208, 256, 256, 256, 243, 254, 256, 255, 256, 256, 256, 256, 210, 256, 256, 256, 238, 168, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 220, 256, 256, 256, 256, 256, 252, 256, 256, 255, 256, 256, 256, 256, 256, 256, 234, 256, 256, 256, 256, 256, 256, 256, 202, 256, 256, 256, 240, 256, 228, 240, 151, 250, 244, 256, 250, 256, 256, 256, 208, 256, 256, 256, 256, 256, 256, 256, 243, 256, 254, 256, 256, 256, 255, 256, 256, 256, 256, 256, 256, 256, 256, 256, 210, 256, 256, 256, 256, 256, 256, 256, 238, 256, 168, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 218, 256, 256, 250, 256, 256, 256, 256, 256, 256, 256, 256, 252, 256, 256, 256, 256, 256, 255, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 231, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 202, 256, 256, 256, 256, 256, 256, 256, 240, 256, 256, 256, 228, 256, 240, 128]};
+const MASK=255;
+function pc(v){let c=0;while(v){c+=v&1;v>>=1;}return c;}
+function strm(name,x){
+  if(name==="x")return x; if(name==="~x")return x^MASK;
+  let inv=name[0]==="~"; let nm=inv?name.slice(1):name;
+  let p=nm.slice(0,3), k=+nm.slice(3); let v;
+  if(p==="shl")v=(x<<k)&MASK; else if(p==="shr")v=x>>k;
+  else if(p==="rol")v=((x<<k)&MASK)|(x>>(8-k)); else v=(x>>k)|((x<<(8-k))&MASK);
+  return inv?(v^MASK)&MASK:v;
+}
+const G2={AND:(a,b)=>a&b,OR:(a,b)=>a|b,XOR:(a,b)=>a^b,NAND:(a,b)=>(a&b)^MASK,NOR:(a,b)=>(a|b)^MASK,XNOR:(a,b)=>(a^b)^MASK};
+const G3={MAJ3:(a,b,c)=>(a&b)|(a&c)|(b&c),CH:(a,b,c)=>(a&b)|((a^MASK)&c),PAR3:(a,b,c)=>a^b^c,
+  OR_XNOR:(a,b,c)=>c|((a^b)^MASK),
+  F2:(a,b,c)=>(((c^MASK)&((a^b)^MASK))|(c&((a&b)^MASK))),
+  AO:(a,b,c)=>(a&b)|c,AX:(a,b,c)=>(a&b)^c};
+const STAB={}; DATA.base.forEach(n=>{const a=new Uint8Array(256);for(let x=0;x<256;x++)a[x]=strm(n,x);STAB[n]=a;});
+function applyVec(gate,f,g,h){
+  const out=new Uint8Array(256);
+  const F=STAB[f],G=STAB[g],H=h?STAB[h]:null;
+  if(G2[gate])for(let x=0;x<256;x++)out[x]=G2[gate](F[x],G[x]);
+  else for(let x=0;x<256;x++)out[x]=G3[gate](F[x],G[x],H[x]);
+  return out;
+}
+// ---- nav ----
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.getElementById(b.dataset.v).classList.add('on');
+  if(b.dataset.v==='families')renderFam(); if(b.dataset.v==='inverse')renderInv();
+  if(b.dataset.v==='disc')renderDPI();
+  if(b.dataset.v==='ranking' && !document.getElementById('rankout').innerHTML)sampleRanking();
+  if(b.dataset.v==='prune' && !document.getElementById('pruneout').innerHTML)samplePrune();
+});
+// ---- prune-order decision procedure ----
+const PRUNE_ORDER=[["NAND",43],["AND",45],["OR",85],["NOR",89],["MAJ3",124],["XNOR",130],["XOR",139],["AO",170],["AX",199],["CH",205],["OR_XNOR",205],["F2",222],["PAR3",236]];
+const FLEX=new Set(["CH","OR_XNOR","F2","PAR3"]);
+function parsePex(id){return document.getElementById(id).value.trim().split('\n').map(l=>l.match(/([01]{8}).*?([01]{8})/)).filter(Boolean).map(m=>[parseInt(m[1],2),parseInt(m[2],2)]);}
+function samplePrune(){
+  const gate=gates[randInt(gates.length)],is3=!!G3[gate];
+  const f=DATA.base[randInt(DATA.base.length)],g=DATA.base[randInt(DATA.base.length)],h=DATA.base[randInt(DATA.base.length)];
+  const rule=x=>is3?G3[gate](strm(f,x),strm(g,x),strm(h,x))&MASK:G2[gate](strm(f,x),strm(g,x))&MASK;
+  const ins=new Set();while(ins.size<8)ins.add(randInt(256));
+  document.getElementById('pex').value=[...ins].map(a=>a.toString(2).padStart(8,'0')+' -> '+rule(a).toString(2).padStart(8,'0')).join('\n');
+  document.getElementById('pruneout').dataset.truth=gate+'('+f+','+g+(is3?','+h:'')+')';
+  runPrune();
+}
+function runPrune(){
+  buildHyps();
+  const ex=parsePex('pex'); const f8=v=>v.toString(2).padStart(8,'0');
+  if(!ex.length){document.getElementById('pruneout').innerHTML='<small>enter examples</small>';return;}
+  let out='';
+  // STEP 0: single-stream (rotation/shift/NOT) — popcount preserved is the tell for rotations
+  const pcPres=ex.every(([a,b])=>{let pa=0,pb=0,x=a,y=b;while(x){pa+=x&1;x>>=1;}while(y){pb+=y&1;y>>=1;}return pa===pb;});
+  let single=null; for(const n of DATA.base){ if(ex.every(([a,b])=>STAB[n][a]===b)){single=n;break;} }
+  out+='<b>Step 0 — single stream</b> (popcount preserved across all rows: '+(pcPres?'<span style="color:var(--good)">yes → rotation likely</span>':'no')+'). ';
+  if(single){out+='<span class="badge b-good">SOLVED: rule = '+single+'</span><br>';
+    document.getElementById('pruneout').innerHTML=out+truthLine();return;}
+  out+='no single stream reproduces all rows.<br><br>';
+  // exact survivors grouped by family
+  const survAll=HYPS.filter(h=>ex.every(([a,b])=>ev(h,a)===b));
+  const byFam={}; for(const [fm] of PRUNE_ORDER)byFam[fm]=[]; survAll.forEach(h=>byFam[h[0]].push(h));
+  out+='<b>Prune order</b> (cheapest-to-rule-out first):<table style="margin-top:6px"><thead><tr><th>#</th><th>family</th><th>reach</th><th>cheap pre-filter</th><th>exact combos</th><th>action</th></tr></thead><tbody>';
+  let stopped=false, firstAlive=null;
+  PRUNE_ORDER.forEach(([fam,reach],i)=>{
+    // cheap reach pre-filter: dead if any example unreachable
+    let killer=null; for(const [a,b] of ex){ if(!reachHas(fam,a,b)){killer=[a,b];break;} }
+    let cell,act;
+    if(killer){cell='<span class="pill p-no">DEAD</span> killed by '+f8(killer[0])+'→'+f8(killer[1]); act='skip (no search)';}
+    else{
+      const c=byFam[fam].length;
+      if(c===0){cell='<span class="pill" style="background:rgba(233,180,40,.12);color:#e9b428;border:1px solid #7a5c12">reach-alive, 0 combos</span>'; act='no single operand-combo fits — skip';}
+      else{
+        // distinct functions among this family's survivors
+        const fs=new Set(byFam[fam].slice(0,4000).map(h=>{let s='';for(let x=0;x<256;x+=4)s+=String.fromCharCode(ev(h,x));return s;}));
+        cell='<span class="pill p-can">ALIVE</span> '+c+' combos';
+        if(!firstAlive)firstAlive=fam;
+        act=(fs.size===1?'<b style="color:var(--good)">CANDIDATE — unique among sampled survivors (estimate, 64-pt fingerprint)</b>':'search '+c+' combos ('+fs.size+'+ functions)');
+        if(fs.size===1&&!stopped){act+=' &nbsp;<span class="badge b-good" style="font-size:10px">STOP HERE</span>';stopped=true;}
+      }
+    }
+    const flex=FLEX.has(fam)?' <small>(flexible)</small>':'';
+    out+='<tr'+(stopped&&firstAlive===fam?' style="background:rgba(67,192,106,.08)"':'')+'><td>'+(i+1)+'</td><td class="mono">'+fam+flex+'</td><td>'+reach+'/256</td><td>'+cell+'</td><td>'+(killer?'—':byFam[fam].length)+'</td><td>'+act+'</td></tr>';
+  });
+  out+='</tbody></table>';
+  const deadN=PRUNE_ORDER.filter(([fm])=>{for(const [a,b] of ex)if(!reachHas(fm,a,b))return true;return false;}).length;
+  const aliveSimple=PRUNE_ORDER.filter(([fm])=>!FLEX.has(fm) && byFam[fm].length>0).map(x=>x[0]);
+  const aliveFlex=PRUNE_ORDER.filter(([fm])=>FLEX.has(fm) && byFam[fm].length>0).map(x=>x[0]);
+  out+='<br><b>summary:</b> cheap pre-filter killed <b>'+deadN+'/13</b> families. '+
+    (aliveSimple.length?'Simple families still alive: <span class="mono">'+aliveSimple.join(', ')+'</span>. ':'All simple families dead → ')+
+    (aliveFlex.length?'Flexible residual: <span class="mono">'+aliveFlex.join(', ')+'</span> (un-prunable; only search these if no simpler rule fits).':'no flexible residual.');
+  document.getElementById('pruneout').innerHTML=out+truthLine();
+}
+function truthLine(){const t=document.getElementById('pruneout').dataset.truth;return t?'<br><br><small>(sampled rule was <b class="mono">'+t+'</b> — shown after the fact)</small>':'';}
+// ---- ranking lab ----
+function popc(v){let c=0;while(v){c+=v&1;v>>=1;}return c;}
+function sampleRanking(forceDead){
+  buildHyps();
+  const gate=gates[randInt(gates.length)], is3=!!G3[gate];
+  const f=DATA.base[randInt(DATA.base.length)],g=DATA.base[randInt(DATA.base.length)],h=DATA.base[randInt(DATA.base.length)];
+  const rule=(x)=>is3?G3[gate](strm(f,x),strm(g,x),strm(h,x))&MASK:G2[gate](strm(f,x),strm(g,x))&MASK;
+  // 10 distinct inputs, optionally seed a dead/extreme row
+  const ins=new Set();
+  if(forceDead||Math.random()<0.6)ins.add([0,255,1,2,4,8,16,32,64,128][randInt(10)]);
+  while(ins.size<10)ins.add(randInt(256));
+  const A=[...ins].slice(0,10);
+  const H=HYPS.length;
+  // standalone survivors per example (raw count = de-saturated signal; kill% all read ~99%)
+  const ex=A.map(a=>{const b=rule(a);
+    let cnt=0;for(const hyp of HYPS)if(ev(hyp,a)===b)cnt++;
+    return {a,b,surv:cnt,bits:Math.log2(H/Math.max(1,cnt)),ipc:popc(a),opc:popc(b)};});
+  ex.sort((p,q)=>p.surv-q.surv || Math.abs(p.ipc-4)-Math.abs(q.ipc-4));
+  const f8=v=>v.toString(2).padStart(8,'0');
+  const maxbits=Math.max(...ex.map(e=>e.bits)), minbits=Math.min(...ex.map(e=>e.bits));
+  const rows=ex.map((e,k)=>{
+    const dead=(e.ipc===0||e.ipc===8||e.opc===0||e.opc===8);
+    const w=2+ (e.bits-minbits)/Math.max(.01,(maxbits-minbits))*98;
+    return '<tr><td><b>'+(k+1)+'</b></td><td class="mono">'+f8(e.a)+' &rarr; '+f8(e.b)+'</td>'+
+      '<td><b>'+e.surv.toLocaleString()+'</b> left</td>'+
+      '<td><span class="barwrap" style="width:150px"><span class="bar" style="display:block;width:'+w+'%"></span></span> '+e.bits.toFixed(1)+' bits</td>'+
+      '<td><small>'+(100*(1-e.surv/H)).toFixed(2)+'%</small></td>'+
+      '<td><small>in pc'+e.ipc+' / out pc'+e.opc+(dead?' <span class="pill p-no" style="font-size:10px">dead-ish</span>':'')+'</small></td></tr>';}).join('');
+  // MARGINAL: cumulative survivors adding examples in ranked order (this is the real narrowing)
+  let alive=HYPS.map((_,i)=>i); const cum=[];
+  for(const e of ex){alive=alive.filter(idx=>ev(HYPS[idx],e.a)===e.b); cum.push(alive.length);}
+  const cumline=ex.map((e,k)=>f8(e.a)+'→'+f8(e.b)+' <b>'+cum[k].toLocaleString()+'</b>').join(' &nbsp;⟶&nbsp; ');
+  const uniqAt=cum.findIndex(c=>c<=1);
+  RANK={ex,H};
+  const sel='<select id="committedRow" onchange="showNextBest()" class="mono">'+ex.map((e,k)=>'<option value="'+k+'">'+f8(e.a)+'→'+f8(e.b)+'</option>').join('')+'</select>';
+  document.getElementById('rankout').innerHTML=
+    'hidden rule: <b class="mono">'+gate+'('+f+','+g+(is3?','+h:'')+')</b> &nbsp;·&nbsp; '+H.toLocaleString()+' candidate hypotheses<br>'+
+    '<small>Kill% saturates (everything reads ~99%), so rank by <b>survivors left</b> (raw) and <b>bits</b>=log2(H/survivors). Hidden rule shown for reference only.</small><br><br>'+
+    '<table><thead><tr><th>rank</th><th>example (most&rarr;least informative)</th><th>survivors</th><th>info (bits)</th><th>kill%</th><th>shape</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<br><b>marginal narrowing</b> (apply in ranked order — accounts for redundancy; THIS is the real story):<br><div style="font-size:12px;margin-top:4px">'+cumline+'</div>'+
+    (uniqAt>=0?'<br><span class="badge b-good" style="font-size:11px">induced function unique (within this catalog) after '+(uniqAt+1)+' of the ranked examples</span>':'<br><span class="badge" style="background:rgba(79,163,255,.14);color:var(--acc);border:1px solid #2b5a8c">'+cum[cum.length-1]+' hypotheses remain after all 10</span>')+
+    '<div class="card" style="margin-top:14px;background:#0d1016"><b>Given a committed row, what is the NEXT-BEST row?</b> (conditional / marginal — redundant rows add nothing)<br><div style="margin-top:6px">committed: '+sel+'</div><div id="nextbest" style="margin-top:8px"></div></div>';
+  showNextBest();
+}
+let RANK=null;
+function showNextBest(){
+  if(!RANK)return;
+  const {ex,H}=RANK; const ci=+document.getElementById('committedRow').value;
+  const f8=v=>v.toString(2).padStart(8,'0');
+  let base=HYPS.map((_,i)=>i).filter(idx=>ev(HYPS[idx],ex[ci].a)===ex[ci].b);
+  const baseN=base.length;
+  const cand=ex.map((e,j)=>{ if(j===ci)return null;
+    const after=base.filter(idx=>ev(HYPS[idx],e.a)===e.b).length;
+    return {j,a:e.a,b:e.b,after,added:baseN-after};}).filter(Boolean);
+  cand.sort((p,q)=>p.after-q.after);
+  document.getElementById('nextbest').innerHTML=
+    'after committing <b class="mono">'+f8(ex[ci].a)+'→'+f8(ex[ci].b)+'</b>: <b>'+baseN.toLocaleString()+'</b> hypotheses remain.<br>'+
+    'next-best rows (most additional narrowing first):<br>'+
+    '<table style="margin-top:4px"><thead><tr><th>+rank</th><th>row</th><th>remaining after BOTH</th><th>additional killed</th></tr></thead><tbody>'+
+    cand.map((c,k)=>'<tr><td>'+(k+1)+'</td><td class="mono">'+f8(c.a)+'→'+f8(c.b)+'</td><td><b>'+c.after.toLocaleString()+'</b></td>'+
+      '<td>'+(c.added>0?'<span class="pill p-can">−'+c.added.toLocaleString()+'</span>':'<span class="pill p-no">redundant (+0)</span>')+'</td></tr>').join('')+
+    '</tbody></table>';
+}
+// ---- explorer ----
+const gates=Object.keys(G2).concat(Object.keys(G3));
+const gsel=document.getElementById('gate');
+gates.forEach(g=>gsel.add(new Option(g,g)));
+['f','g','h'].forEach(id=>{const s=document.getElementById(id);DATA.base.forEach(n=>s.add(new Option(n,n)));});
+document.getElementById('gate').value='F2';document.getElementById('f').value='rol2';
+document.getElementById('g').value='shl6';document.getElementById('h').value='shr1';
+[gsel,...['f','g','h'].map(i=>document.getElementById(i))].forEach(s=>s.onchange=renderExp);
+function renderExp(){
+  const gate=gsel.value, is3=!!G3[gate];
+  document.getElementById('h').disabled=!is3;
+  const f=document.getElementById('f').value,g=document.getElementById('g').value,h=document.getElementById('h').value;
+  const out=applyVec(gate,f,g,is3?h:null);
+  // mapping image
+  const c=document.getElementById('map'),ctx=c.getContext('2d'),img=ctx.createImageData(256,256);
+  for(let x=0;x<256;x++){const r=(x>>4),col=(x&15);for(let dy=0;dy<16;dy++)for(let dx=0;dx<16;dx++){
+    const px=(col*16+dx)+(r*16+dy)*256, o=out[x];
+    const hue=o/255*300; const [rr,gg,bb]=hsl(hue,70,45+o/255*15);
+    img.data[px*4]=rr;img.data[px*4+1]=gg;img.data[px*4+2]=bb;img.data[px*4+3]=255;}}
+  ctx.putImageData(img,0,0);
+  // bijectivity
+  const distinct=new Set(out).size, bij=distinct===256;
+  document.getElementById('bijbadge').innerHTML=bij
+    ?'<span class="badge b-good">BIJECTIVE — permutation of 0..255</span>'
+    :'<span class="badge b-bad">LOSSY — '+distinct+'/256 distinct outputs</span>';
+  // histogram
+  const hh=new Array(9).fill(0); for(let x=0;x<256;x++)hh[pc(out[x])]++;
+  const mx=Math.max(...hh);
+  document.getElementById('hist').innerHTML=hh.map((v,i)=>'<div class="col" style="height:'+(v/mx*100)+'%"><span>'+i+'</span></div>').join('');
+  // popcount-preserving?
+  let pres=true,upOnly=true,dnOnly=true; for(let x=0;x<256;x++){const d=pc(out[x])-pc(x);if(d!==0)pres=false;if(d<0)upOnly=false;if(d>0)dnOnly=false;}
+  document.getElementById('stats').innerHTML='mean out popcount: <b>'+(hh.reduce((s,v,i)=>s+v*i,0)/256).toFixed(2)+'</b><br>'+
+    'popcount-preserving (rotation-like): <b>'+(pres?'YES':'no')+'</b><br>'+
+    'popcount never rises: <b>'+(dnOnly?'YES (AND-like)':'no')+'</b> · never falls: <b>'+(upOnly?'YES (OR-like)':'no')+'</b>';
+  // transfer heatmap
+  const t=document.getElementById('trans'),tx=t.getContext('2d');tx.clearRect(0,0,180,180);
+  const Hm=Array.from({length:9},()=>new Array(9).fill(0)),colsum=new Array(9).fill(0);
+  for(let x=0;x<256;x++){const ip=pc(x),op=pc(out[x]);Hm[op][ip]++;colsum[ip]++;}
+  const cell=20;
+  for(let ip=0;ip<9;ip++)for(let op=0;op<9;op++){const v=colsum[ip]?Hm[op][ip]/colsum[ip]:0;
+    const [r,g2,b]=mag(v);tx.fillStyle='rgb('+r+','+g2+','+b+')';tx.fillRect(ip*cell,(8-op)*cell,cell,cell);}
+  tx.strokeStyle='#39d0e0';tx.lineWidth=1;tx.beginPath();tx.moveTo(0,180);tx.lineTo(180,0);tx.stroke();
+}
+function hsl(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return[Math.round(255*f(0)),Math.round(255*f(8)),Math.round(255*f(4))];}
+function mag(v){const r=Math.round(255*Math.min(1,v*1.4)),g=Math.round(180*Math.max(0,v-.3)),b=Math.round(60*Math.max(0,v-.6)+v*40);return[r,g,b];}
+// ---- families ----
+function renderFam(){
+  const tb=document.querySelector('#famtab tbody');tb.innerHTML='';
+  const ent=Object.entries(DATA.fam).sort((a,b)=>b[1].bij/b[1].tot-a[1].bij/a[1].tot);
+  for(const [n,v] of ent){const pctB=100*v.bij/v.tot;
+    tb.innerHTML+='<tr><td class="mono">'+n+'</td><td>'+v.arity+'</td><td>'+v.bij+'/'+v.tot+'</td>'+
+      '<td>'+pctB.toFixed(1)+'%</td><td><span class="barwrap"><span class="bar" style="display:block;width:'+pctB+'%"></span></span></td>'+
+      '<td>'+(100-pctB).toFixed(1)+'% '+(v.bij===0?'<span class="badge b-bad" style="font-size:10px">never bijective</span>':'')+'</td></tr>';}
+}
+// ---- inverse ----
+document.getElementById('postimg').oninput=renderInv;
+function renderInv(){
+  const s=document.getElementById('postimg').value.trim();
+  if(!/^[01]{8}$/.test(s)){document.getElementById('invout').innerHTML='<small>enter 8 bits</small>';return;}
+  const b=parseInt(s,2);
+  let can=[],no=[];
+  for(const [n,arr] of Object.entries(DATA.ach)){(arr[b]?can:no).push(n);}
+  document.getElementById('invout').innerHTML='output <b class="mono">'+s+'</b> (popcount '+pc(b)+')<br><br>'+
+    '<b>CAN be produced by:</b><br>'+can.map(n=>'<span class="pill p-can">'+n+'</span>').join('')+
+    '<br><br><b>RULED OUT (no operand combo over base streams reaches this output):</b><br>'+
+    (no.length?no.map(n=>'<span class="pill p-no">'+n+'</span>').join(''):'<small>none — every family can produce it</small>');
+}
+// ---- discriminator ----
+let HYPS=null;
+const ev=(h,x)=>{const[g,f,gg,hh]=h;return (hh?G3[g](STAB[f][x],STAB[gg][x],STAB[hh][x]):G2[g](STAB[f][x],STAB[gg][x]))&MASK;};
+function buildHyps(){if(HYPS)return;HYPS=[];
+  for(const g of Object.keys(G2))for(const f of DATA.base)for(const gg of DATA.base)HYPS.push([g,f,gg,null]);
+  for(const g of Object.keys(G3))for(const f of DATA.base)for(const gg of DATA.base)for(const hh of DATA.base)HYPS.push([g,f,gg,hh]);
+}
+// reachability pre-filter: S(a)=stream-values of a; family killed iff b not reachable as GATE of stream-values
+function streamVals(a){const s=new Set();for(const n of DATA.base)s.add(STAB[n][a]);return [...s];}
+function reachHas(fam,a,b){const S=streamVals(a);
+  if(G2[fam]){for(const u of S)for(const v of S)if((G2[fam](u,v)&MASK)===b)return true;return false;}
+  for(const u of S)for(const v of S)for(const w of S)if((G3[fam](u,v,w)&MASK)===b)return true;return false;}
+function reachSize(fam,a){const S=streamVals(a),R=new Set();
+  if(G2[fam]){for(const u of S)for(const v of S)R.add(G2[fam](u,v)&MASK);}
+  else{for(const u of S)for(const v of S)for(const w of S)R.add(G3[fam](u,v,w)&MASK);}return R.size;}
+function runDisc(){
+  buildHyps();
+  const lines=document.getElementById('ex').value.trim().split('\n').map(l=>l.match(/([01]{8}).*?([01]{8})/)).filter(Boolean);
+  if(!lines.length){document.getElementById('discout').innerHTML='<small>enter at least one a -> b line</small>';return;}
+  const ex=lines.map(m=>[parseInt(m[1],2),parseInt(m[2],2)]);
+  const allFam=Object.keys(G2).concat(Object.keys(G3));
+  // hyp eval helper
+  const ev=(h,x)=>{const[g,f,gg,hh]=h;return (hh?G3[g](STAB[f][x],STAB[gg][x],STAB[hh][x]):G2[g](STAB[f][x],STAB[gg][x]))&MASK;};
+  // step-by-step: alive index list, shrink per example
+  let alive=HYPS.map((_,i)=>i);
+  const famAlive=()=>{const m={};allFam.forEach(k=>m[k]=0);alive.forEach(i=>m[HYPS[i][0]]++);return m;};
+  let prevFam=famAlive(); const total0=alive.length;
+  let html='<table><thead><tr><th>#</th><th>example</th><th>survivors</th><th>killed this step</th><th>families newly dead</th></tr></thead><tbody>';
+  ex.forEach(([a,b],i)=>{
+    const before=alive.length;
+    alive=alive.filter(idx=>ev(HYPS[idx],a)===b);
+    const fa=famAlive();
+    const newDead=allFam.filter(k=>prevFam[k]>0&&fa[k]===0);
+    prevFam=fa;
+    html+='<tr><td>'+(i+1)+'</td><td class="mono">'+a.toString(2).padStart(8,'0')+'&rarr;'+b.toString(2).padStart(8,'0')+'</td>'+
+      '<td>'+before.toLocaleString()+' &rarr; <b>'+alive.length.toLocaleString()+'</b> <small>(-'+(before-alive.length).toLocaleString()+')</small></td>'+
+      '<td>'+(before-alive.length).toLocaleString()+'</td>'+
+      '<td>'+(newDead.length?newDead.map(k=>'<span class="pill p-no">'+k+'</span>').join(''):'<small>—</small>')+'</td></tr>';
+  });
+  html+='</tbody></table>';
+  // final family breakdown + uniqueness (distinct surviving FUNCTIONS)
+  const fa=famAlive(); const killed=allFam.filter(k=>fa[k]===0).length;
+  // distinct functions among survivors — fingerprint on ALL 256 inputs (exact). Guard if too many.
+  let fsize=null;
+  if(alive.length<=8000){const fs=new Set();for(const idx of alive){let s='';for(let x=0;x<256;x++)s+=String.fromCharCode(ev(HYPS[idx],x));fs.add(s);}fsize=fs.size;}
+  let verdict;
+  if(alive.length===0) verdict='<span class="badge b-bad">ALL families killed — NO single whole-byte gate fits these (different rules, or a per-bit real row)</span>';
+  else if(fsize===1) verdict='<span class="badge b-good">UNIQUELY SOLVED — all '+alive.length+' survivors compute the SAME function on all 256 inputs (the full transformation is uniquely determined)</span>';
+  else if(fsize!==null) verdict='<span class="badge" style="background:rgba(79,163,255,.14);color:var(--acc);border:1px solid #2b5a8c">'+fsize+' distinct functions still possible — the full transformation is NOT uniquely determined (add an example; a specific query may still be agreed by all survivors)</span>';
+  else verdict='<span class="badge" style="background:rgba(79,163,255,.14);color:var(--acc);border:1px solid #2b5a8c">'+alive.length.toLocaleString()+' hypotheses (too many to dedup — add more examples)</span>';
+  // WHY KILLED (reach pre-filter) + search reduction
+  const deadFams=allFam.filter(k=>fa[k]===0);
+  let whyRows='';
+  for(const fam of deadFams){
+    let killer=null;
+    for(const [a,b] of ex){ if(!reachHas(fam,a,b)){killer=[a,b];break;} }
+    if(killer){const [a,b]=killer;
+      whyRows+='<tr><td class="mono">'+fam+'</td><td class="mono">'+a.toString(2).padStart(8,'0')+'→'+b.toString(2).padStart(8,'0')+'</td>'+
+        '<td>b is not '+(G2[fam]?'a 2-input':'a 3-input')+' '+fam+' of any stream-values of a</td>'+
+        '<td>|S(a)|='+streamVals(a).length+', reach='+reachSize(fam,a)+'/256</td></tr>';}
+  }
+  const aliveFams=allFam.filter(k=>fa[k]>0);
+  const aliveHyps=aliveFams.reduce((s,k)=>s+(G2[k]?900:27000),0);
+  const whyBlock=deadFams.length?
+    '<div class="card" style="margin-top:14px;background:#0d1016"><b>WHY each family was ruled out</b> (the cheap reach pre-filter — no full search needed):'+
+    '<table style="margin-top:6px"><thead><tr><th>family</th><th>killing example</th><th>reason</th><th>flexibility</th></tr></thead><tbody>'+whyRows+'</tbody></table>'+
+    '<br><b>search reduction:</b> skip '+deadFams.length+' families &rarr; only enumerate <b>'+aliveFams.length+'</b> families ('+aliveHyps.toLocaleString()+' operand-combos) instead of '+total0.toLocaleString()+'. '+
+    '<small>Note: flexible GATE3s (CH/F2/OR_XNOR/PAR3, reach ~205-236/256) are almost never killed, so they survive — that caps family-pruning.</small></div>' : '';
+  document.getElementById('discout').innerHTML=
+    '<b style="font-size:15px">'+killed+'/'+allFam.length+' families killed · '+alive.length.toLocaleString()+'/'+total0.toLocaleString()+' hypotheses survive</b><br>'+verdict+'<br><br>'+
+    '<b>kill order (this sequence):</b>'+html+
+    '<br><b>final per-family:</b><br>'+allFam.map(k=>fa[k]+'×<span class="mono">'+k+'</span>'+(fa[k]===0?'💀':'')).join(' · ')+
+    whyBlock;
+}
+// ---- sampling lab controls ----
+function fillSel(id,arr,val){const s=document.getElementById(id);s.innerHTML='';arr.forEach(o=>s.add(new Option(o,o)));if(val)s.value=val;}
+function initLab(){fillSel('srGate',gates,'F2');['srF','srG','srH'].forEach((id,i)=>fillSel(id,DATA.base,['rol2','shl6','shr1'][i]));}
+function randInt(n){return Math.floor(Math.random()*n);}
+function randomRule(){document.getElementById('srGate').value=gates[randInt(gates.length)];
+  document.getElementById('srF').value=DATA.base[randInt(DATA.base.length)];
+  document.getElementById('srG').value=DATA.base[randInt(DATA.base.length)];
+  document.getElementById('srH').value=DATA.base[randInt(DATA.base.length)];}
+function sampleEx(){
+  const gate=document.getElementById('srGate').value,is3=!!G3[gate];
+  const f=document.getElementById('srF').value,g=document.getElementById('srG').value,h=document.getElementById('srH').value;
+  let K=Math.max(1,Math.min(10,+document.getElementById('srK').value||4));
+  const idx=[...Array(256).keys()]; for(let i=255;i>0;i--){const j=randInt(i+1);[idx[i],idx[j]]=[idx[j],idx[i]];}
+  const lines=[];
+  for(let n=0;n<K;n++){const a=idx[n];const o=is3?G3[gate](strm(f,a),strm(g,a),strm(h,a)):G2[gate](strm(f,a),strm(g,a));
+    lines.push(a.toString(2).padStart(8,'0')+' -> '+(o&MASK).toString(2).padStart(8,'0'));}
+  document.getElementById('ex').value=lines.join('\n');
+  buildHyps(); runDisc();
+}
+function shuffleEx(){
+  let L=document.getElementById('ex').value.trim().split('\n').filter(s=>s.trim());
+  for(let i=L.length-1;i>0;i--){const j=randInt(i+1);[L[i],L[j]]=[L[j],L[i]];}
+  document.getElementById('ex').value=L.join('\n'); buildHyps(); runDisc();
+}
+function renderDPI(){
+  const c=document.getElementById('dpi'),ctx=c.getContext('2d');ctx.clearRect(0,0,512,120);
+  const mx=Math.max(...DATA.dpi);
+  for(let x=0;x<256;x++){const h=DATA.dpi[x]/mx*110;ctx.fillStyle='hsl('+(200-DATA.dpi[x]/mx*200)+',70%,55%)';ctx.fillRect(x*2,120-h,2,h);}
+  const idx=DATA.dpi.map((v,i)=>[v,i]);
+  const top=idx.slice().sort((a,b)=>b[0]-a[0]).slice(0,6),bot=idx.slice().sort((a,b)=>a[0]-b[0]).slice(0,6);
+  const f=i=>i.toString(2).padStart(8,'0');
+  document.getElementById('dpitop').innerHTML='<small>x-axis = input byte 0..255, height = distinct outputs across all hyps.<br>'+
+    'MOST informative inputs: '+top.map(([v,i])=>'<span class="pill p-can">'+f(i)+' ('+v+')</span>').join('')+'<br>'+
+    'LEAST informative (avoid relying on these rows): '+bot.map(([v,i])=>'<span class="pill p-no">'+f(i)+' ('+v+')</span>').join('')+'</small>';
+}
+renderExp(); initLab();
+</script></body></html>

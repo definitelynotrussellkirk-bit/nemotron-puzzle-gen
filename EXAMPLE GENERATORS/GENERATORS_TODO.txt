@@ -1,0 +1,96 @@
+Micro-Skill Generator Library — 49 Skills
+============================================
+
+Framework: generators/microskill_framework.py + generators/microskill_skills.py
+Usage:
+  python3 -m generators.microskill_framework --list
+  python3 -m generators.microskill_framework --skill X --n N --difficulty mixed
+  python3 -m generators.microskill_framework --all --n N
+
+BIT MANIPULATION (21 skills):
+  bit_shift              Single shift/rotate execution
+  bit_gate               Position-by-position bitwise gate
+  bit_compose2           Two-step: shift + gate
+  bit_compose3           Three-step: 3 shifts + family formula
+  bit_rule_check         "Does this rule fit ALL examples?"
+  bit_distinguish        "Which example distinguishes two rules?"
+  bit_similarity         "How many bits of shift(x) match output?"
+  bit_full_verify        Verify rule against ALL 5 examples
+  bit_error_detect       "Find the error in this computation"
+  bit_which_op           "Which operation: shr1, shl1, or rol1?"
+  bit_counterfactual     "Which input CANNOT produce this output?"
+  bit_properties         "True/false: shr always zeros top bits"
+  bit_step_by_step       Detailed step-by-step single operation
+  bit_reverse_find       "Find input given operation + output"
+  bit_two_step_id        "Which shift in gate(x, shift(x)) = result?"
+  bit_popcount           Count 1-bits, check preservation
+  bit_nojump             Full mini-puzzle with step-by-step execution
+  bit_edge_shift_vs_rotate  Shift vs rotate side-by-side
+  bit_edge_zeros         Extreme inputs (0, 255, single bit)
+  bit_edge_gate          Gates with all-0/all-1/identical inputs
+  general_string_diff    Compare two 8-bit strings position by position
+
+ENCRYPTION (15 skills):
+  enc_extract_mapping    Extract mappings from sentence pair
+  enc_apply_mapping      Apply mapping to decrypt a word
+  enc_forced_mapping     "What mappings are forced?"
+  enc_bijection          "Is this mapping bijective?"
+  enc_propagation        "We learn X->Y, what's blocked?"
+  enc_most_constrained   "Which word has fewest completions?"
+  enc_not_forced         "Which mapping is NOT forced?"
+  enc_reverse_decrypt    "Encrypt this word (reverse direction)"
+  enc_repeated_letters   Repeated letter constraints
+  enc_vocab              Vocabulary by word length
+  enc_pattern_fill       "What words fit this pattern?"
+  enc_can_fit            "Can this word fit given blocked letters?"
+  enc_why_wrong          "Why not X instead of Y?"
+  str_count              Count characters in a string
+  str_compare            Compare strings, find differences
+
+TRANSFORMATION (8 skills):
+  trans_parse            Parse equation into parts
+  trans_op_from_examples "Which operation fits all examples?"
+  trans_base             Base identification + encode/decode
+  trans_sign             Opsign/tailsign/plain conventions
+  trans_chain            Chained ops: reverse then add, etc.
+  trans_reverse          "Is X the reverse of Y?"
+  trans_symbol_edit      Identify edit ops (delete center, swap)
+  trans_rev_chain        Apply rev_input/rev_output modifiers
+
+GRAVITATIONAL (3 skills):
+  arith_round            2r rounding rule
+  arith_long_multiply    Step-by-step multiplication
+  arith_long_divide      Division with quotient + remainder
+
+UNIT CONVERSION (1 skill):
+  arith_hundredths       Hundredths <-> decimal
+
+NUMBER CONVERSION (1 skill):
+  numconv_base           Convert between bases (8, 10, 16)
+
+FUTURE SKILL IDEAS (not yet built):
+
+BIT — Pattern across inputs:
+  - "When input bit 3 flips 0→1, which output bits change?" — sensitivity analysis
+  - "Sort examples by input value. Does output increase monotonically?" — ordering
+
+BIT — Relationship between examples:
+  - "Examples 2 and 5 differ by 1 input bit. How do outputs differ?" — local behavior
+  - "Which two examples are most/least similar?" — clustering
+
+BIT — Structural observations:
+  - "Is output a subsequence of input?" — detect copy/select
+  - "Do any output bits always equal the corresponding input bit?" — identity positions
+  - "Do any output bits always equal NOT of corresponding input bit?" — complement positions
+
+BIT — Multi-example deduction:
+  - "If rule works on examples 1-4, what MUST be true?" — constraint narrowing
+  - "Input bit 5=1 AND output bit 2=1 in all examples. Coincidence or rule?" — correlation strength
+
+ENCRYPTION — Advanced:
+  - "Two partial words share an unknown letter. If word1 is X, what does that force for word2?" — cross-word constraint propagation
+  - "Given 3 candidate words for this slot, which one leaves the most options for remaining slots?" — look-ahead CSP
+
+TRANSFORMATION — Advanced:
+  - "These 3 equations use different operators. What do the operators have in common?" — meta-pattern
+  - "If the operation is a+b+1, what would the result be for these 5 queries?" — batch application after identification
